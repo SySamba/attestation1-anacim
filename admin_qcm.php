@@ -27,8 +27,23 @@ $pdo->exec("CREATE TABLE IF NOT EXISTS qcm_choices (
     FOREIGN KEY (question_id) REFERENCES qcm_questions(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+// Pagination for questions
+$q_per_page = 10;
+$q_current_page = isset($_GET['qpage']) ? max(1, (int)$_GET['qpage']) : 1;
+$q_offset = ($q_current_page - 1) * $q_per_page;
+
+// Total count
+$q_count_sql = "SELECT COUNT(*) AS total FROM qcm_questions";
+$q_count_stmt = $pdo->prepare($q_count_sql);
+$q_count_stmt->execute();
+$q_total = (int)$q_count_stmt->fetch(PDO::FETCH_ASSOC)['total'];
+$q_total_pages = max(1, (int)ceil($q_total / $q_per_page));
+
 // Fetch existing questions with choices (ascending for sequential display 1,2,3,...)
-$q_sql = "SELECT * FROM qcm_questions ORDER BY id ASC";
+// Note: Some MySQL/PDO configs don't allow bound params in LIMIT/OFFSET. Inject validated ints instead.
+$safe_limit = (int)$q_per_page;
+$safe_offset = (int)$q_offset;
+$q_sql = "SELECT * FROM qcm_questions ORDER BY id ASC LIMIT $safe_offset, $safe_limit";
 $q_stmt = $pdo->prepare($q_sql);
 $q_stmt->execute();
 $questions = $q_stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -113,7 +128,7 @@ include 'includes/header.php';
                             <div class="list-group-item">
                                 <div class="d-flex justify-content-between">
                                     <div>
-                                        <span class="badge bg-secondary me-2">#<?php echo $idx + 1; ?></span>
+                                        <span class="badge bg-secondary me-2">#<?php echo ($q_offset + $idx + 1); ?></span>
                                         <strong><?php echo nl2br(htmlspecialchars($q['question_text'])); ?></strong>
                                         <span class="badge bg-info ms-2"><?php echo $q['question_type'] === 'single' ? 'Choix unique' : 'Choix multiples'; ?></span>
                                         <div class="mt-2">
@@ -138,11 +153,64 @@ include 'includes/header.php';
                                             <?php endif; ?>
                                         </div>
                                     </div>
-                                    <!-- Future actions: edit/delete -->
+                                    <div class="ms-3 d-flex align-items-start gap-2">
+                                        <a href="admin_qcm_edit.php?id=<?php echo (int)$q['id']; ?>" class="btn btn-sm btn-outline-anacim">
+                                            <i class="fas fa-edit"></i> Modifier
+                                        </a>
+                                        <form action="delete_qcm_question.php" method="post" onsubmit="return confirm('Supprimer cette question ? Cette action est irréversible.');">
+                                            <input type="hidden" name="id" value="<?php echo (int)$q['id']; ?>">
+                                            <button type="submit" class="btn btn-sm btn-danger">
+                                                <i class="fas fa-trash"></i> Supprimer
+                                            </button>
+                                        </form>
+                                    </div>
                                 </div>
                             </div>
                         <?php endforeach; ?>
                     </div>
+
+                    <?php if ($q_total_pages > 1): ?>
+                    <nav aria-label="Pagination des questions" class="mt-3">
+                        <ul class="pagination pagination-sm mb-0">
+                            <?php if ($q_current_page > 1): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="?qpage=<?php echo $q_current_page - 1; ?>">
+                                        <i class="fas fa-chevron-left"></i> Précédent
+                                    </a>
+                                </li>
+                            <?php else: ?>
+                                <li class="page-item disabled"><span class="page-link"><i class="fas fa-chevron-left"></i> Précédent</span></li>
+                            <?php endif; ?>
+
+                            <?php
+                            $q_start = max(1, $q_current_page - 2);
+                            $q_end = min($q_total_pages, $q_current_page + 2);
+                            if ($q_start > 1) {
+                                echo '<li class="page-item"><a class="page-link" href="?qpage=1">1</a></li>';
+                                if ($q_start > 2) echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                            }
+                            for ($i = $q_start; $i <= $q_end; $i++) {
+                                $active = $i === $q_current_page ? ' active' : '';
+                                echo '<li class="page-item' . $active . '"><a class="page-link" href="?qpage=' . $i . '">' . $i . '</a></li>';
+                            }
+                            if ($q_end < $q_total_pages) {
+                                if ($q_end < $q_total_pages - 1) echo '<li class="page-item disabled"><span class="page-link">...</span></li>';
+                                echo '<li class="page-item"><a class="page-link" href="?qpage=' . $q_total_pages . '">' . $q_total_pages . '</a></li>';
+                            }
+                            ?>
+
+                            <?php if ($q_current_page < $q_total_pages): ?>
+                                <li class="page-item">
+                                    <a class="page-link" href="?qpage=<?php echo $q_current_page + 1; ?>">
+                                        Suivant <i class="fas fa-chevron-right"></i>
+                                    </a>
+                                </li>
+                            <?php else: ?>
+                                <li class="page-item disabled"><span class="page-link">Suivant <i class="fas fa-chevron-right"></i></span></li>
+                            <?php endif; ?>
+                        </ul>
+                    </nav>
+                    <?php endif; ?>
                 <?php endif; ?>
             </div>
         </div>
@@ -157,22 +225,42 @@ document.addEventListener('DOMContentLoaded', function() {
     const typeMultiple = document.getElementById('type_multiple');
 
     function addChoiceRow(initialText = '') {
-        const idx = Date.now() + Math.floor(Math.random()*1000);
         const row = document.createElement('div');
         row.className = 'input-group mb-2';
-        row.innerHTML = `
-            <span class="input-group-text correctness-cell">
-                <input type="radio" name="correct_single" class="form-check-input d-none">
-                <input type="checkbox" class="form-check-input d-none">
-            </span>
-            <input type="text" name="choices[]" class="form-control" placeholder="Réponse..." required value="${initialText.replace(/"/g,'&quot;')}">
-            <button class="btn btn-outline-danger" type="button" title="Supprimer"><i class="fas fa-trash"></i></button>
-        `;
 
-        // delete button
-        row.querySelector('button').addEventListener('click', () => {
-            row.remove();
-        });
+        const correctnessSpan = document.createElement('span');
+        correctnessSpan.className = 'input-group-text correctness-cell';
+
+        const radio = document.createElement('input');
+        radio.type = 'radio';
+        radio.name = 'correct_single';
+        radio.className = 'form-check-input d-none';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'form-check-input d-none';
+
+        correctnessSpan.appendChild(radio);
+        correctnessSpan.appendChild(checkbox);
+
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.name = 'choices[]';
+        input.className = 'form-control';
+        input.placeholder = 'Réponse...';
+        input.required = true;
+        if (initialText) input.value = initialText;
+
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn btn-outline-danger';
+        delBtn.title = 'Supprimer';
+        delBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        delBtn.addEventListener('click', () => row.remove());
+
+        row.appendChild(correctnessSpan);
+        row.appendChild(input);
+        row.appendChild(delBtn);
 
         choicesContainer.appendChild(row);
         refreshCorrectnessInputs();

@@ -1,1 +1,5 @@
-config/database.php
+# Ignore entire config directory (contains sensitive credentials)
+config/
+
+# Keep a placeholder if needed (uncomment next line after creating it)
+# !config/.gitkeep
