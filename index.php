@@ -12,6 +12,15 @@ include 'includes/header.php';
                 <p class="mb-0">Certification du Personnel Chargé de la Mise en Œuvre des Contrôles de Sûreté</p>
             </div>
             <div class="card-body">
+                <div class="alert alert-info d-flex align-items-center" role="alert">
+                    <i class="fas fa-file-word fa-lg me-2"></i>
+                    <div>
+                        Téléchargez le formulaire officiel à remplir: 
+                        <a class="fw-bold" href="FORMULAIRE CERTFICATION PERSONNEL DE SÜRETE_v2_.docx" download>
+                            FORMULAIRE CERTFICATION PERSONNEL DE SÛRETÉ (Word)
+                        </a>
+                    </div>
+                </div>
                 <?php if (isset($_SESSION['success'])): ?>
                     <div class="alert alert-success alert-dismissible fade show">
                         <i class="fas fa-check-circle"></i> <?php echo $_SESSION['success']; unset($_SESSION['success']); ?>
@@ -135,6 +144,12 @@ include 'includes/header.php';
                             <label for="formation_imagerie" class="form-label">Formation Imagerie (PDF)</label>
                             <input type="file" class="form-control" id="formation_imagerie" name="formation_imagerie" accept=".pdf">
                         </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <label for="formulaire_surete" class="form-label">Formulaire Sûreté rempli (Word ou PDF)</label>
+                        <input type="file" class="form-control" id="formulaire_surete" name="formulaire_surete" accept=".doc,.docx,.pdf">
+                        <small class="text-muted">Téléchargez d'abord le formulaire Word, remplissez-le puis déposez ici le fichier rempli (.docx ou .pdf).</small>
                     </div>
 
                     <div class="d-grid gap-2 mt-4">

@@ -144,27 +144,35 @@ include 'includes/header.php';
                             'casier' => 'Casier Judiciaire',
                             'certificat_medical' => 'Certificat Médical',
                             'formation_base' => 'Formation de Base',
-                            'formation_imagerie' => 'Formation Imagerie'
+                            'formation_imagerie' => 'Formation Imagerie',
+                            'formulaire_surete' => 'Formulaire Sûreté (rempli)'
                         ];
                         
                         foreach ($documents as $doc): 
                         ?>
+                        <?php 
+                            $ext = strtolower(pathinfo($doc['file_path'], PATHINFO_EXTENSION));
+                            $is_pdf = ($ext === 'pdf');
+                            $icon_html = $is_pdf 
+                                ? '<i class="fas fa-file-pdf text-danger me-2"></i>' 
+                                : '<i class="fas fa-file-word text-primary me-2"></i>';
+                        ?>
                         <div class="list-group-item d-flex justify-content-between align-items-center">
                             <div>
-                                <i class="fas fa-file-pdf text-danger me-2"></i>
+                                <?php echo $icon_html; ?>
                                 <strong><?php echo $doc_labels[$doc['document_type']] ?? $doc['document_type']; ?></strong>
                                 <br>
-                                <small class="text-muted"><?php echo htmlspecialchars($doc['file_name']); ?></small>
+                                <small class="text-muted break-word"><?php echo htmlspecialchars($doc['file_name']); ?></small>
                                 <br>
                                 <small class="text-muted">Ajouté le <?php echo date('d/m/Y H:i', strtotime($doc['uploaded_at'])); ?></small>
                             </div>
-                            <div>
+                            <div class="btn-group btn-group-sm">
                                 <a href="download_file.php?id=<?php echo $doc['id']; ?>" 
-                                   class="btn btn-anacim btn-sm" title="Télécharger">
+                                   class="btn btn-anacim" title="Télécharger">
                                     <i class="fas fa-download"></i>
                                 </a>
                                 <a href="view_file.php?id=<?php echo $doc['id']; ?>" 
-                                   class="btn btn-info btn-sm" title="Visualiser" target="_blank">
+                                   class="btn btn-info" title="Visualiser" target="_blank">
                                     <i class="fas fa-eye"></i>
                                 </a>
                             </div>

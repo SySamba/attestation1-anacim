@@ -33,10 +33,25 @@ if (!file_exists($file_path)) {
     exit;
 }
 
-// Set headers for file viewing
-header('Content-Type: application/pdf');
-header('Content-Disposition: inline; filename="' . $document['file_name'] . '"');
-header('Content-Length: ' . filesize($file_path));
+$ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+
+if ($ext === 'pdf') {
+    // View PDFs inline
+    header('Content-Type: application/pdf');
+    header('Content-Disposition: inline; filename="' . $document['file_name'] . '"');
+    header('Content-Length: ' . filesize($file_path));
+} else {
+    // Download non-PDFs (e.g., Word)
+    $mime = 'application/octet-stream';
+    if ($ext === 'doc') {
+        $mime = 'application/msword';
+    } elseif ($ext === 'docx') {
+        $mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    }
+    header('Content-Type: ' . $mime);
+    header('Content-Disposition: attachment; filename="' . $document['file_name'] . '"');
+    header('Content-Length: ' . filesize($file_path));
+}
 
 // Output file
 readfile($file_path);

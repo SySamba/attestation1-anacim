@@ -358,14 +358,18 @@ document.addEventListener('DOMContentLoaded', function() {
     });
     
     // Download all candidates
-    downloadAllBtn.addEventListener('click', function() {
-        window.location.href = 'export_candidates.php?type=all';
-    });
+    if (downloadAllBtn) {
+        downloadAllBtn.addEventListener('click', function() {
+            window.location.href = 'export_candidates.php?type=all';
+        });
+    }
     
     // Download filtered candidates
-    downloadFilteredBtn.addEventListener('click', function() {
-        window.location.href = 'export_candidates.php?type=category&category=' + currentFilter;
-    });
+    if (downloadFilteredBtn) {
+        downloadFilteredBtn.addEventListener('click', function() {
+            window.location.href = 'export_candidates.php?type=category&category=' + currentFilter;
+        });
+    }
 });
 </script>
 

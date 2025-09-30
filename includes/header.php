@@ -131,6 +131,38 @@
             max-height: 60px;
             width: auto;
         }
+
+        /* Utilities for wrapping long content (filenames, emails) */
+        .break-word {
+            word-break: break-word;
+            overflow-wrap: anywhere;
+        }
+        .no-wrap {
+            white-space: nowrap;
+        }
+
+        /* Responsive tweaks */
+        @media (max-width: 576px) {
+            .navbar-anacim .navbar-brand small {
+                font-size: 0.7rem;
+            }
+            .navbar-anacim .navbar-brand strong {
+                font-size: 1rem;
+            }
+            .logo-container {
+                max-height: 48px;
+            }
+            .logo-container img {
+                max-height: 48px;
+            }
+            .btn {
+                padding: 0.375rem 0.5rem;
+                font-size: 0.9rem;
+            }
+            .table {
+                font-size: 0.9rem;
+            }
+        }
     </style>
 </head>
 <body>
@@ -150,6 +182,9 @@
             <div class="navbar-nav ms-auto">
                 <a class="nav-link" href="admin_dashboard.php">
                     <i class="fas fa-tachometer-alt"></i> Tableau de Bord
+                </a>
+                <a class="nav-link" href="admin_qcm.php">
+                    <i class="fas fa-list-check"></i> QCM
                 </a>
                 <a class="nav-link" href="logout.php">
                     <i class="fas fa-sign-out-alt"></i> Déconnexion

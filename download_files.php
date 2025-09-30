@@ -59,10 +59,13 @@ foreach ($documents as $doc) {
             'casier' => 'Casier_Judiciaire',
             'certificat_medical' => 'Certificat_Medical',
             'formation_base' => 'Formation_Base',
-            'formation_imagerie' => 'Formation_Imagerie'
+            'formation_imagerie' => 'Formation_Imagerie',
+            'formulaire_surete' => 'Formulaire_Surete_Remplis'
         ];
-        
-        $new_name = ($doc_labels[$doc['document_type']] ?? $doc['document_type']) . '.pdf';
+
+        $ext = strtolower(pathinfo($doc['file_path'], PATHINFO_EXTENSION));
+        $label = ($doc_labels[$doc['document_type']] ?? $doc['document_type']);
+        $new_name = $label . '.' . $ext;
         $zip->addFile($doc['file_path'], $new_name);
     }
 }

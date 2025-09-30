@@ -35,9 +35,20 @@ if (!file_exists($file_path)) {
     exit;
 }
 
+// Determine mime type and extension
+$ext = strtolower(pathinfo($file_path, PATHINFO_EXTENSION));
+$mime = 'application/octet-stream';
+if ($ext === 'pdf') {
+    $mime = 'application/pdf';
+} elseif ($ext === 'doc') {
+    $mime = 'application/msword';
+} elseif ($ext === 'docx') {
+    $mime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+}
+
 // Set headers for file download
-header('Content-Type: application/pdf');
-header('Content-Disposition: attachment; filename="' . $document['prenom'] . '_' . $document['nom'] . '_' . $document['document_type'] . '.pdf"');
+header('Content-Type: ' . $mime);
+header('Content-Disposition: attachment; filename="' . $document['prenom'] . '_' . $document['nom'] . '_' . $document['document_type'] . '.' . $ext . '"');
 header('Content-Length: ' . filesize($file_path));
 
 // Output file
