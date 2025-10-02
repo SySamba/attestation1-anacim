@@ -15,7 +15,7 @@ try {
     
     echo "CNI documents found: " . count($results) . "\n";
     foreach ($results as $doc) {
-        echo "ID: {$doc['id']}, Candidate: {$doc['candidate_id']}, File: {$doc['file_name']}\n";
+        echo "ID: {$doc['id']}, Candidat: {$doc['candidate_id']}, File: {$doc['file_name']}\n";
     }
     
 } catch(PDOException $e) {

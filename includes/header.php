@@ -186,6 +186,9 @@
                 <a class="nav-link" href="admin_qcm.php">
                     <i class="fas fa-list-check"></i> QCM
                 </a>
+                <a class="nav-link" href="admin_results.php">
+                    <i class="fas fa-chart-bar"></i> Résultats
+                </a>
                 <a class="nav-link" href="logout.php">
                     <i class="fas fa-sign-out-alt"></i> Déconnexion
                 </a>

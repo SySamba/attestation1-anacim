@@ -161,9 +161,20 @@ include 'includes/header.php';
 
                 <hr class="my-4">
                 <div class="text-center">
-                    <a href="admin_login.php" class="btn btn-outline-secondary">
-                        <i class="fas fa-user-shield"></i> Accès Administration
-                    </a>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <a href="candidate_login.php" class="btn btn-anacim btn-lg w-100 mb-2">
+                                <i class="fas fa-user me-2"></i>Espace Candidat
+                                <br><small>Passer mon examen QCM</small>
+                            </a>
+                        </div>
+                        <div class="col-md-6">
+                            <a href="admin_login.php" class="btn btn-outline-secondary btn-lg w-100 mb-2">
+                                <i class="fas fa-user-shield me-2"></i>Administration
+                                <br><small>Gestion des candidatures</small>
+                            </a>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>

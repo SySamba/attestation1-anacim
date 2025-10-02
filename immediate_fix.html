@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Correction Immédiate Demba</title>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; }
+        .success { color: green; font-weight: bold; }
+        .error { color: red; font-weight: bold; }
+        .info { color: blue; }
+        button { padding: 10px 20px; margin: 10px; background: #007bff; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        button:hover { background: #0056b3; }
+        #result { margin-top: 20px; padding: 15px; border: 1px solid #ddd; background: #f9f9f9; }
+    </style>
+</head>
+<body>
+    <h1>Correction Score Demba Diop</h1>
+    
+    <button onclick="fixScore()">CORRIGER LE SCORE MAINTENANT</button>
+    <button onclick="checkScore()">VÉRIFIER LE SCORE</button>
+    
+    <div id="result"></div>
+
+    <script>
+        function fixScore() {
+            document.getElementById('result').innerHTML = '<p class="info">Correction en cours...</p>';
+            
+            fetch('force_demba_fix.php')
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById('result').innerHTML = '<div class="success"><h3>Résultat de la correction:</h3><pre>' + data + '</pre></div>';
+                })
+                .catch(error => {
+                    document.getElementById('result').innerHTML = '<div class="error">Erreur: ' + error + '</div>';
+                });
+        }
+        
+        function checkScore() {
+            document.getElementById('result').innerHTML = '<p class="info">Vérification en cours...</p>';
+            
+            fetch('check_demba_final.php')
+                .then(response => response.text())
+                .then(data => {
+                    document.getElementById('result').innerHTML = '<div class="info"><h3>Score actuel:</h3><pre>' + data + '</pre></div>';
+                })
+                .catch(error => {
+                    document.getElementById('result').innerHTML = '<div class="error">Erreur: ' + error + '</div>';
+                });
+        }
+    </script>
+</body>
+</html>

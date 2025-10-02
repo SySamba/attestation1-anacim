@@ -27,9 +27,11 @@ $sql = "SELECT c.*,
         COUNT(cd.id) as document_count,
         GROUP_CONCAT(cd.document_type) as document_types,
         MAX(CASE WHEN cd.document_type = 'cni' THEN cd.file_name END) as cni_file_name,
-        MAX(CASE WHEN cd.document_type = 'cni' THEN cd.id END) as cni_doc_id
+        MAX(CASE WHEN cd.document_type = 'cni' THEN cd.id END) as cni_doc_id,
+        au.username as reviewed_by_username
         FROM candidates c 
         LEFT JOIN candidate_documents cd ON c.id = cd.candidate_id 
+        LEFT JOIN admin_users au ON c.reviewed_by = au.id
         GROUP BY c.id 
         ORDER BY c.created_at DESC
         LIMIT :limit OFFSET :offset";
@@ -46,7 +48,10 @@ $stats_sql = "SELECT
     COUNT(CASE WHEN categorie = '2' THEN 1 END) as cat2,
     COUNT(CASE WHEN categorie = '3' THEN 1 END) as cat3,
     COUNT(CASE WHEN categorie = '4' THEN 1 END) as cat4,
-    COUNT(CASE WHEN categorie = '5' THEN 1 END) as cat5
+    COUNT(CASE WHEN categorie = '5' THEN 1 END) as cat5,
+    COUNT(CASE WHEN status = 'pending' THEN 1 END) as pending,
+    COUNT(CASE WHEN status = 'accepted' THEN 1 END) as accepted,
+    COUNT(CASE WHEN status = 'rejected' THEN 1 END) as rejected
     FROM candidates";
 $stats_stmt = $pdo->prepare($stats_sql);
 $stats_stmt->execute();
@@ -59,8 +64,23 @@ include 'includes/header.php';
     <div class="col-12">
         <div class="card">
             <div class="card-header card-header-anacim">
-                <h4><i class="fas fa-tachometer-alt"></i> Tableau de Bord - Certification Sûreté Aviation</h4>
-                <p class="mb-0">Bienvenue, <?php echo htmlspecialchars($_SESSION['admin_username']); ?></p>
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h4><i class="fas fa-tachometer-alt"></i> Tableau de Bord - Certification Sûreté Aviation</h4>
+                        <p class="mb-0">Bienvenue, <?php echo htmlspecialchars($_SESSION['admin_username']); ?></p>
+                    </div>
+                    <div>
+                        <a href="admin_qcm.php" class="btn btn-outline-light btn-sm me-2">
+                            <i class="fas fa-list-check"></i> Gérer QCM
+                        </a>
+                        <a href="admin_results.php" class="btn btn-outline-light btn-sm me-2">
+                            <i class="fas fa-chart-bar"></i> Voir les Notes
+                        </a>
+                        <a href="logout.php" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-sign-out-alt"></i> Déconnexion
+                        </a>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -116,6 +136,41 @@ include 'includes/header.php';
             </div>
         </div>
         
+        <!-- Status Filter -->
+        <div class="card mt-3">
+            <div class="card-header card-header-anacim">
+                <h6><i class="fas fa-tasks"></i> Filtrer par Statut</h6>
+            </div>
+            <div class="card-body p-0">
+                <div class="list-group list-group-flush">
+                    <button class="list-group-item list-group-item-action status-filter" data-status="all">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-list me-2"></i>Tous les Statuts</span>
+                            <span class="badge bg-secondary rounded-pill"><?php echo $stats['total_candidates']; ?></span>
+                        </div>
+                    </button>
+                    <button class="list-group-item list-group-item-action status-filter" data-status="pending">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-clock me-2"></i>En Attente</span>
+                            <span class="badge bg-warning rounded-pill"><?php echo $stats['pending']; ?></span>
+                        </div>
+                    </button>
+                    <button class="list-group-item list-group-item-action status-filter" data-status="accepted">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-check me-2"></i>Acceptés</span>
+                            <span class="badge bg-success rounded-pill"><?php echo $stats['accepted']; ?></span>
+                        </div>
+                    </button>
+                    <button class="list-group-item list-group-item-action status-filter" data-status="rejected">
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span><i class="fas fa-times me-2"></i>Refusés</span>
+                            <span class="badge bg-danger rounded-pill"><?php echo $stats['rejected']; ?></span>
+                        </div>
+                    </button>
+                </div>
+            </div>
+        </div>
+        
         <!-- Download Section
         <div class="card mt-3">
             <div class="card-header card-header-anacim">
@@ -155,6 +210,7 @@ include 'includes/header.php';
                             <th>CNI</th>
                             <th>Email</th>
                             <th>Catégorie</th>
+                            <th>Statut</th>
                             <th>Documents</th>
                             <th>Date Soumission</th>
                             <th>Actions</th>
@@ -162,7 +218,7 @@ include 'includes/header.php';
                     </thead>
                     <tbody>
                         <?php foreach ($candidates as $candidate): ?>
-                        <tr class="candidate-row" data-category="<?php echo $candidate['categorie']; ?>">
+                        <tr class="candidate-row" data-category="<?php echo $candidate['categorie']; ?>" data-status="<?php echo $candidate['status']; ?>">
                             <td>
                                 <span class="badge bg-anacim-yellow text-dark">
                                     <?php echo str_pad($candidate['id'], 6, '0', STR_PAD_LEFT); ?>
@@ -208,6 +264,37 @@ include 'includes/header.php';
                                 </span>
                             </td>
                             <td>
+                                <?php
+                                $status_classes = [
+                                    'pending' => 'bg-warning text-dark',
+                                    'accepted' => 'bg-success',
+                                    'rejected' => 'bg-danger'
+                                ];
+                                $status_icons = [
+                                    'pending' => 'fas fa-clock',
+                                    'accepted' => 'fas fa-check',
+                                    'rejected' => 'fas fa-times'
+                                ];
+                                $status_texts = [
+                                    'pending' => 'En Attente',
+                                    'accepted' => 'Accepté',
+                                    'rejected' => 'Refusé'
+                                ];
+                                ?>
+                                <span class="badge <?php echo $status_classes[$candidate['status']]; ?>">
+                                    <i class="<?php echo $status_icons[$candidate['status']]; ?> me-1"></i>
+                                    <?php echo $status_texts[$candidate['status']]; ?>
+                                </span>
+                                <?php if ($candidate['reviewed_at']): ?>
+                                    <br><small class="text-muted">
+                                        <?php echo date('d/m/Y', strtotime($candidate['reviewed_at'])); ?>
+                                        <?php if ($candidate['reviewed_by_username']): ?>
+                                            par <?php echo htmlspecialchars($candidate['reviewed_by_username']); ?>
+                                        <?php endif; ?>
+                                    </small>
+                                <?php endif; ?>
+                            </td>
+                            <td>
                                 <span class="badge bg-info">
                                     <?php echo $candidate['document_count']; ?> document(s)
                                 </span>
@@ -216,7 +303,7 @@ include 'includes/header.php';
                                 <small><?php echo date('d/m/Y H:i', strtotime($candidate['created_at'])); ?></small>
                             </td>
                             <td>
-                                <div class="btn-group btn-group-sm">
+                                <div class="btn-group btn-group-sm mb-1">
                                     <a href="view_candidate.php?id=<?php echo $candidate['id']; ?>" 
                                        class="btn btn-anacim btn-sm" title="Voir le dossier">
                                         <i class="fas fa-eye"></i>
@@ -226,6 +313,37 @@ include 'includes/header.php';
                                         <i class="fas fa-download"></i>
                                     </a>
                                 </div>
+                                
+                                <?php if ($candidate['status'] === 'pending'): ?>
+                                <div class="btn-group btn-group-sm w-100">
+                                    <button class="btn btn-success btn-sm accept-candidate" 
+                                            data-candidate-id="<?php echo $candidate['id']; ?>" 
+                                            data-candidate-name="<?php echo htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']); ?>"
+                                            title="Accepter le candidat">
+                                        <i class="fas fa-check"></i> Accepter
+                                    </button>
+                                    <button class="btn btn-danger btn-sm reject-candidate" 
+                                            data-candidate-id="<?php echo $candidate['id']; ?>" 
+                                            data-candidate-name="<?php echo htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']); ?>"
+                                            title="Refuser le candidat">
+                                        <i class="fas fa-times"></i> Refuser
+                                    </button>
+                                </div>
+                                <?php elseif ($candidate['status'] === 'accepted'): ?>
+                                <div class="mt-1">
+                                    <span class="badge bg-success w-100">
+                                        <i class="fas fa-check-circle me-1"></i>Candidat Accepté
+                                    </span>
+                                </div>
+                                <?php elseif ($candidate['status'] === 'rejected' && $candidate['rejection_reason']): ?>
+                                <div class="mt-1">
+                                    <button class="btn btn-outline-secondary btn-sm w-100" 
+                                            data-bs-toggle="tooltip" 
+                                            title="<?php echo htmlspecialchars($candidate['rejection_reason']); ?>">
+                                        <i class="fas fa-info-circle"></i> Raison
+                                    </button>
+                                </div>
+                                <?php endif; ?>
                             </td>
                         </tr>
                         <?php endforeach; ?>
@@ -357,6 +475,33 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     });
     
+    // Status filtering
+    const statusFilters = document.querySelectorAll('.status-filter');
+    statusFilters.forEach(filter => {
+        filter.addEventListener('click', function() {
+            const selectedStatus = this.getAttribute('data-status');
+            
+            // Update active filter
+            statusFilters.forEach(f => f.classList.remove('active'));
+            this.classList.add('active');
+            
+            // Filter candidates by status
+            candidateRows.forEach(row => {
+                const candidateStatus = row.getAttribute('data-status');
+                
+                if (selectedStatus === 'all' || candidateStatus === selectedStatus) {
+                    row.style.display = '';
+                    row.style.opacity = '1';
+                } else {
+                    row.style.opacity = '0.3';
+                    setTimeout(() => {
+                        row.style.display = 'none';
+                    }, 200);
+                }
+            });
+        });
+    });
+    
     // Download all candidates
     if (downloadAllBtn) {
         downloadAllBtn.addEventListener('click', function() {
@@ -370,6 +515,79 @@ document.addEventListener('DOMContentLoaded', function() {
             window.location.href = 'export_candidates.php?type=category&category=' + currentFilter;
         });
     }
+    
+    // Accept/Reject candidate functionality
+    const acceptButtons = document.querySelectorAll('.accept-candidate');
+    const rejectButtons = document.querySelectorAll('.reject-candidate');
+    
+    acceptButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const candidateId = this.getAttribute('data-candidate-id');
+            const candidateName = this.getAttribute('data-candidate-name');
+            
+            if (confirm(`Êtes-vous sûr de vouloir accepter le candidat ${candidateName} ?`)) {
+                processCandidateAction(candidateId, 'accept', null);
+            }
+        });
+    });
+    
+    rejectButtons.forEach(button => {
+        button.addEventListener('click', function() {
+            const candidateId = this.getAttribute('data-candidate-id');
+            const candidateName = this.getAttribute('data-candidate-name');
+            
+            const reason = prompt(`Veuillez indiquer la raison du refus pour ${candidateName}:`);
+            if (reason && reason.trim() !== '') {
+                processCandidateAction(candidateId, 'reject', reason.trim());
+            }
+        });
+    });
+    
+    function processCandidateAction(candidateId, action, reason) {
+        const button = document.querySelector(`[data-candidate-id="${candidateId}"]`);
+        const originalText = button.innerHTML;
+        
+        // Show loading state
+        button.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Traitement...';
+        button.disabled = true;
+        
+        fetch('process_candidate_action.php', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                candidate_id: candidateId,
+                action: action,
+                rejection_reason: reason
+            })
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Show success message
+                alert(data.message);
+                // Reload the page to show updated status
+                location.reload();
+            } else {
+                alert('Erreur: ' + data.message);
+                button.innerHTML = originalText;
+                button.disabled = false;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('Erreur de communication avec le serveur');
+            button.innerHTML = originalText;
+            button.disabled = false;
+        });
+    }
+    
+    // Initialize tooltips
+    const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+    const tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl);
+    });
 });
 </script>
 
