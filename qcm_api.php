@@ -314,16 +314,37 @@ try {
             $total_questions = $session['total_questions'];
             $correct_count = $results['correct'] ?? 0;
             $score = ($correct_count / $total_questions) * 100;
-            $passed = $score >= 80; // 80% minimum to pass
-            $stmt = $pdo->prepare("UPDATE qcm_sessions SET status = 'completed', completed_at = NOW(), score = ?, correct_answers = ? WHERE id = ?");
+            
+            $stmt = $pdo->prepare("UPDATE qcm_sessions SET completed_at = NOW(), score = ?, correct_answers = ?, status = 'completed' WHERE id = ?");
             $stmt->execute([$score, $correct_count, $session_id]);
+            
+            // Récupérer les infos du candidat pour l'email
+            $stmt = $pdo->prepare("
+                SELECT c.id, c.prenom, c.nom, c.email, c.matricule 
+                FROM candidates c 
+                JOIN qcm_sessions qs ON c.id = qs.candidate_id 
+                WHERE qs.id = ?
+            ");
+            $stmt->execute([$session_id]);
+            $candidate = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Envoyer email selon le résultat
+            if ($candidate && $candidate['email']) {
+                require_once 'send_email.php';
+                
+                if ($score >= 80) {
+                    sendSuccessEmail($candidate, round($score, 2));
+                } else {
+                    sendFailureEmail($candidate, round($score, 2));
+                }
+            }
             
             echo json_encode([
                 'success' => true,
-                'score' => $score,
+                'score' => round($score, 2),
                 'correct_answers' => $correct_count,
                 'total_questions' => $total_questions,
-                'passed' => $passed
+                'passed' => $score >= 80
             ]);
             break;
             

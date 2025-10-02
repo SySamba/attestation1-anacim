@@ -54,8 +54,9 @@ include 'includes/header.php';
                             <small class="text-muted">Joindre une copie de votre CNI en format PDF</small>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="matricule" class="form-label">Matricule</label>
-                            <input type="text" class="form-control" id="matricule" name="matricule">
+                            <label for="matricule" class="form-label">Matricule <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="matricule" name="matricule" required>
+                            <small class="text-muted">Votre matricule d'employé est obligatoire</small>
                         </div>
                     </div>
 

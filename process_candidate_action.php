@@ -1,6 +1,7 @@
 <?php
 session_start();
 require_once 'config/database.php';
+require_once 'send_email.php';
 
 // Check if admin is logged in
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
@@ -44,7 +45,7 @@ if ($action === 'reject' && empty($rejection_reason)) {
 
 try {
     // Check if candidate exists
-    $stmt = $pdo->prepare("SELECT id, prenom, nom, email, status FROM candidates WHERE id = ?");
+    $stmt = $pdo->prepare("SELECT id, prenom, nom, email, matricule, status FROM candidates WHERE id = ?");
     $stmt->execute([$candidate_id]);
     $candidate = $stmt->fetch(PDO::FETCH_ASSOC);
     
@@ -75,30 +76,33 @@ try {
     
     // Send email notification if email exists
     if ($candidate['email']) {
-        $subject = $action === 'accept' 
-            ? "ANACIM - Candidature acceptée" 
-            : "ANACIM - Candidature refusée";
-        
         if ($action === 'accept') {
-            $message = "Bonjour " . $candidate['prenom'] . " " . $candidate['nom'] . ",\n\n";
-            $message .= "Nous avons le plaisir de vous informer que votre candidature pour la certification de sûreté aviation a été acceptée.\n\n";
-            $message .= "Vous pouvez maintenant passer votre test QCM en ligne en vous connectant sur notre plateforme.\n\n";
-            $message .= "Lien pour passer le test: " . $_SERVER['HTTP_HOST'] . "/candidate_qcm.php?token=" . base64_encode($candidate_id) . "\n\n";
-            $message .= "Cordialement,\nL'équipe ANACIM";
+            // Envoyer email d'acceptation avec identifiants QCM
+            $emailSent = sendAcceptanceEmail($candidate);
+            if (!$emailSent) {
+                error_log("Erreur envoi email d'acceptation pour candidat ID: " . $candidate_id);
+            }
         } else {
-            $message = "Bonjour " . $candidate['prenom'] . " " . $candidate['nom'] . ",\n\n";
-            $message .= "Nous regrettons de vous informer que votre candidature pour la certification de sûreté aviation a été refusée.\n\n";
-            $message .= "Raison: " . $rejection_reason . "\n\n";
-            $message .= "Vous pouvez soumettre une nouvelle candidature après avoir corrigé les points mentionnés.\n\n";
-            $message .= "Cordialement,\nL'équipe ANACIM";
+            // Email de refus (simple)
+            $subject = "ANACIM - Candidature refusée";
+            $message = "
+            <html>
+            <body style='font-family: Arial, sans-serif; line-height: 1.6;'>
+                <div style='background: #dc2626; color: white; padding: 20px; text-align: center;'>
+                    <h2>Candidature Refusée</h2>
+                </div>
+                <div style='padding: 20px;'>
+                    <p>Bonjour <strong>" . htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']) . "</strong>,</p>
+                    <p>Nous regrettons de vous informer que votre candidature pour la certification de sûreté aviation a été refusée.</p>
+                    <p><strong>Raison :</strong> " . htmlspecialchars($rejection_reason) . "</p>
+                    <p>Vous pouvez soumettre une nouvelle candidature après avoir corrigé les points mentionnés.</p>
+                    <p>Cordialement,<br>L'équipe ANACIM</p>
+                </div>
+            </body>
+            </html>";
+            
+            sendEmail($candidate['email'], $subject, $message, true);
         }
-        
-        $headers = "From: noreply@anacim.sn\r\n";
-        $headers .= "Reply-To: admin@anacim.sn\r\n";
-        $headers .= "Content-Type: text/plain; charset=UTF-8\r\n";
-        
-        // Note: In production, use a proper email service
-        // mail($candidate['email'], $subject, $message, $headers);
     }
     
     echo json_encode([
