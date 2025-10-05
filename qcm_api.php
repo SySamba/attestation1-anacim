@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once 'config.php';
 
 header('Content-Type: application/json');
 
@@ -20,6 +20,8 @@ try {
         case 'start_session':
             $candidate_id = $input['candidate_id'] ?? null;
             $category = $input['category'] ?? null;
+            $phase = $input['phase'] ?? 'phase1';
+            $epreuve = $input['epreuve'] ?? 'THB';
             
             if (!$candidate_id || !$category) {
                 throw new Exception('Paramètres manquants');
@@ -34,18 +36,26 @@ try {
                 throw new Exception('Candidat non autorisé');
             }
             
-            // Check if already has a session
-            $stmt = $pdo->prepare("SELECT * FROM qcm_sessions WHERE candidate_id = ? AND status IN ('in_progress', 'completed')");
-            $stmt->execute([$candidate_id]);
+            // Check if already has a session for this phase/epreuve
+            $stmt = $pdo->prepare("SELECT * FROM qcm_sessions WHERE candidate_id = ? AND phase = ? AND epreuve = ? AND status IN ('in_progress', 'completed')");
+            $stmt->execute([$candidate_id, $phase, $epreuve]);
             $existing = $stmt->fetch(PDO::FETCH_ASSOC);
             
             if ($existing) {
-                throw new Exception('Une session existe déjà pour ce candidat');
+                throw new Exception('Une session existe déjà pour cette épreuve');
             }
             
-            // Get all available questions (remove category filter since column doesn't exist)
-            $stmt = $pdo->prepare("SELECT * FROM qcm_questions ORDER BY RAND()");
-            $stmt->execute();
+            // Validate category access based on epreuve
+            if ($epreuve === 'THI' && $category !== '1') {
+                throw new Exception('THI est réservé à la catégorie C1');
+            }
+            if ($epreuve === 'THB' && $category === '1') {
+                throw new Exception('THB est pour les catégories 2, 3, 4, 5');
+            }
+            
+            // Get questions for specific phase and epreuve
+            $stmt = $pdo->prepare("SELECT * FROM qcm_questions WHERE phase = ? AND epreuve = ? AND category = ? ORDER BY RAND() LIMIT 20");
+            $stmt->execute([$phase, $epreuve, $category]);
             
             $questions_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
@@ -91,9 +101,9 @@ try {
                 throw new Exception('Pas assez de questions disponibles pour cette catégorie');
             }
             
-            // Create new session
-            $stmt = $pdo->prepare("INSERT INTO qcm_sessions (candidate_id, total_questions, time_limit_minutes) VALUES (?, ?, 60)");
-            $stmt->execute([$candidate_id, count($questions)]);
+            // Create new session with phase and epreuve
+            $stmt = $pdo->prepare("INSERT INTO qcm_sessions (candidate_id, phase, epreuve, total_questions, time_limit_minutes) VALUES (?, ?, ?, ?, 60)");
+            $stmt->execute([$candidate_id, $phase, $epreuve, count($questions)]);
             $session_id = $pdo->lastInsertId();
             
             // Get the created session
@@ -318,6 +328,28 @@ try {
             $stmt = $pdo->prepare("UPDATE qcm_sessions SET completed_at = NOW(), score = ?, correct_answers = ?, status = 'completed' WHERE id = ?");
             $stmt->execute([$score, $correct_count, $session_id]);
             
+            // Get session info for phase/epreuve
+            $stmt = $pdo->prepare("SELECT * FROM qcm_sessions WHERE id = ?");
+            $stmt->execute([$session_id]);
+            $session_info = $stmt->fetch(PDO::FETCH_ASSOC);
+            
+            // Update candidate phase results
+            $stmt = $pdo->prepare("INSERT INTO candidate_phase_results (candidate_id, phase, epreuve, score, status, session_id, completed_at) 
+                                  VALUES (?, ?, ?, ?, ?, ?, NOW()) 
+                                  ON DUPLICATE KEY UPDATE score = ?, status = ?, session_id = ?, completed_at = NOW()");
+            $result_status = $score >= 80 ? 'passed' : 'failed';
+            $stmt->execute([
+                $session_info['candidate_id'], 
+                $session_info['phase'], 
+                $session_info['epreuve'], 
+                $score, 
+                $result_status, 
+                $session_id,
+                $score, 
+                $result_status, 
+                $session_id
+            ]);
+            
             // Récupérer les infos du candidat pour l'email
             $stmt = $pdo->prepare("
                 SELECT c.id, c.prenom, c.nom, c.email, c.matricule 
@@ -328,14 +360,35 @@ try {
             $stmt->execute([$session_id]);
             $candidate = $stmt->fetch(PDO::FETCH_ASSOC);
             
+            // Check if candidate has completed all Phase 1 tests and passed them
+            $phase1_passed = false;
+            if ($session_info['phase'] === 'phase1' && $score >= 80) {
+                $stmt = $pdo->prepare("
+                    SELECT COUNT(*) as total_passed 
+                    FROM candidate_phase_results 
+                    WHERE candidate_id = ? AND phase = 'phase1' AND status = 'passed'
+                ");
+                $stmt->execute([$session_info['candidate_id']]);
+                $phase1_results = $stmt->fetch(PDO::FETCH_ASSOC);
+                
+                // Check if all 4 Phase 1 tests are passed
+                if ($phase1_results['total_passed'] >= 4) {
+                    $phase1_passed = true;
+                }
+            }
+            
             // Envoyer email selon le résultat
             if ($candidate && $candidate['email']) {
                 require_once 'send_email.php';
                 
                 if ($score >= 80) {
-                    sendSuccessEmail($candidate, round($score, 2));
+                    if ($phase1_passed) {
+                        sendPhase2AdmissionEmail($candidate, $session_info['epreuve'], round($score, 2));
+                    } else {
+                        sendEpreuveSuccessEmail($candidate, $session_info['epreuve'], round($score, 2));
+                    }
                 } else {
-                    sendFailureEmail($candidate, round($score, 2));
+                    sendEpreuveFailureEmail($candidate, $session_info['epreuve'], round($score, 2));
                 }
             }
             

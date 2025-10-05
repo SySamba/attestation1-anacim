@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once 'config.php';
 
 // Check if admin is logged in
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
@@ -83,6 +83,37 @@ include 'includes/header.php';
                         <label class="form-label">Question</label>
                         <textarea name="question_text" class="form-control" rows="2" placeholder="Saisissez la question..." required></textarea>
                     </div>
+                    
+                    <div class="row mb-3">
+                        <div class="col-md-4">
+                            <label class="form-label">Phase</label>
+                            <select name="phase" class="form-select" id="phaseSelect" required>
+                                <option value="phase1">Phase 1 - Filtrage des personnes et bagages</option>
+                                <option value="phase2">Phase 2 - Imagerie</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Épreuve</label>
+                            <select name="epreuve" class="form-select" id="epreuveSelect" required>
+                                <option value="THB">TH.B - Théorie de Base</option>
+                                <option value="FBAG">FBAG - Filtrage Bagages</option>
+                                <option value="PLP">PLP - Palpation</option>
+                                <option value="FMAG">FMAG - Filtrage Magnétomètre</option>
+                                <option value="IMAGERIE" style="display:none;">Imagerie</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <label class="form-label">Catégorie</label>
+                            <select name="category" class="form-select" required>
+                                <option value="1">Catégorie 1</option>
+                                <option value="2">Catégorie 2</option>
+                                <option value="3">Catégorie 3</option>
+                                <option value="4">Catégorie 4</option>
+                                <option value="5">Catégorie 5</option>
+                            </select>
+                        </div>
+                    </div>
+                    
                     <div class="mb-3">
                         <label class="form-label me-3">Type de question</label>
                         <div class="form-check form-check-inline">
@@ -311,6 +342,37 @@ document.addEventListener('DOMContentLoaded', function() {
     addChoiceBtn.addEventListener('click', () => addChoiceRow());
     typeSingle.addEventListener('change', refreshCorrectnessInputs);
     typeMultiple.addEventListener('change', refreshCorrectnessInputs);
+    
+    // Gérer l'affichage des épreuves selon la phase sélectionnée
+    const phaseSelect = document.getElementById('phaseSelect');
+    const epreuveSelect = document.getElementById('epreuveSelect');
+    
+    phaseSelect.addEventListener('change', function() {
+        const phase = this.value;
+        const options = epreuveSelect.querySelectorAll('option');
+        
+        options.forEach(option => {
+            if (phase === 'phase1') {
+                if (['THB', 'FBAG', 'PLP', 'FMAG'].includes(option.value)) {
+                    option.style.display = '';
+                } else {
+                    option.style.display = 'none';
+                }
+            } else if (phase === 'phase2') {
+                if (option.value === 'IMAGERIE') {
+                    option.style.display = '';
+                } else {
+                    option.style.display = 'none';
+                }
+            }
+        });
+        
+        // Sélectionner la première option visible
+        const firstVisible = Array.from(options).find(opt => opt.style.display !== 'none');
+        if (firstVisible) {
+            epreuveSelect.value = firstVisible.value;
+        }
+    });
 
     // On submit, map selected correct inputs to choices[] indexes
     document.getElementById('qcmForm').addEventListener('submit', function(e) {

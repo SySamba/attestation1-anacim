@@ -1,19 +1,38 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once 'config.php';
 
-// Get candidate ID from token
-$token = $_GET['token'] ?? '';
-if (empty($token)) {
-    die('Token manquant');
+// Get candidate info and check access
+$candidate_id = $_SESSION['candidate_id'] ?? null;
+if (!$candidate_id) {
+    header('Location: candidate_login.php');
+    exit;
 }
 
-$candidate_id = base64_decode($token);
-if (!$candidate_id || !is_numeric($candidate_id)) {
-    die('Token invalide');
+// Get phase and epreuve from URL parameters
+$phase = $_GET['phase'] ?? 'phase1';
+$epreuve = $_GET['epreuve'] ?? 'THB';
+
+// Validate phase and epreuve
+$valid_phases = ['phase1', 'phase2'];
+$valid_epreuves = ['THB', 'THI', 'IMAGERIE'];
+
+if (!in_array($phase, $valid_phases) || !in_array($epreuve, $valid_epreuves)) {
+    header('Location: candidate_dashboard.php');
+    exit;
 }
 
-// Check if candidate exists and is accepted
+// Check if epreuve matches phase
+if ($phase === 'phase1' && !in_array($epreuve, ['THB', 'THI'])) {
+    header('Location: candidate_dashboard.php');
+    exit;
+}
+if ($phase === 'phase2' && $epreuve !== 'IMAGERIE') {
+    header('Location: candidate_dashboard.php');
+    exit;
+}
+
+// Get candidate info
 $stmt = $pdo->prepare("SELECT * FROM candidates WHERE id = ? AND status = 'accepted'");
 $stmt->execute([$candidate_id]);
 $candidate = $stmt->fetch(PDO::FETCH_ASSOC);
@@ -22,9 +41,34 @@ if (!$candidate) {
     die('Candidat non trouvé ou non autorisé à passer le test');
 }
 
-// Check if candidate already has an active session
-$stmt = $pdo->prepare("SELECT * FROM qcm_sessions WHERE candidate_id = ? AND status IN ('in_progress', 'completed') ORDER BY started_at DESC LIMIT 1");
-$stmt->execute([$candidate_id]);
+// Validate access based on candidate category
+if ($phase === 'phase1') {
+    if ($candidate['categorie'] == '1' && $epreuve !== 'THI') {
+        $_SESSION['error_message'] = "Les candidats de catégorie C1 doivent passer le test THI (Théorie Imagerie).";
+        header('Location: candidate_dashboard.php');
+        exit;
+    }
+    if (in_array($candidate['categorie'], ['2', '3', '4', '5']) && $epreuve !== 'THB') {
+        $_SESSION['error_message'] = "Les candidats des catégories 2, 3, 4, 5 doivent passer le test THB (Théorie de Base).";
+        header('Location: candidate_dashboard.php');
+        exit;
+    }
+}
+
+// Check if candidate already has a completed session for this specific phase/epreuve
+$stmt = $pdo->prepare("SELECT * FROM qcm_sessions WHERE candidate_id = ? AND phase = ? AND epreuve = ? AND status = 'completed' ORDER BY started_at DESC LIMIT 1");
+$stmt->execute([$candidate_id, $phase, $epreuve]);
+$completed_session = $stmt->fetch(PDO::FETCH_ASSOC);
+
+if ($completed_session) {
+    $_SESSION['error_message'] = "Vous avez déjà passé le test " . $epreuve . ". Une seule tentative est autorisée par épreuve.";
+    header('Location: candidate_dashboard.php');
+    exit;
+}
+
+// Check for in-progress session
+$stmt = $pdo->prepare("SELECT * FROM qcm_sessions WHERE candidate_id = ? AND phase = ? AND epreuve = ? AND status = 'in_progress' ORDER BY started_at DESC LIMIT 1");
+$stmt->execute([$candidate_id, $phase, $epreuve]);
 $existing_session = $stmt->fetch(PDO::FETCH_ASSOC);
 
 $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['nom'];
@@ -257,7 +301,9 @@ $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['
                 body: JSON.stringify({
                     action: 'start_session',
                     candidate_id: <?php echo $candidate_id; ?>,
-                    category: '<?php echo $candidate['categorie']; ?>'
+                    category: '<?php echo $candidate['categorie']; ?>',
+                    phase: '<?php echo $phase; ?>',
+                    epreuve: '<?php echo $epreuve; ?>'
                 })
             })
             .then(response => response.json())

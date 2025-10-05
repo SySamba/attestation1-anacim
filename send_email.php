@@ -100,9 +100,18 @@ function sendAcceptanceEmail($candidate) {
     return sendEmail($candidate['email'], $subject, $message, true);
 }
 
-// Email de réussite à l'examen
-function sendSuccessEmail($candidate, $score) {
-    $subject = "ANACIM - Félicitations ! Vous avez réussi l'examen QCM";
+// Email de réussite d'une épreuve spécifique
+function sendEpreuveSuccessEmail($candidate, $epreuve, $score) {
+    $epreuve_names = [
+        'THB' => 'Théorie de Base',
+        'FBAG' => 'Filtrage Bagages', 
+        'PLP' => 'Palpation',
+        'FMAG' => 'Filtrage Magnétomètre',
+        'IMAGERIE' => 'Imagerie'
+    ];
+    $epreuve_name = $epreuve_names[$epreuve] ?? $epreuve;
+    
+    $subject = "ANACIM - Épreuve {$epreuve_name} Réussie";
     
     $message = "
     <html>
@@ -117,28 +126,28 @@ function sendSuccessEmail($candidate, $score) {
     </head>
     <body>
         <div class='header'>
-            <h2>🎉 FÉLICITATIONS ! Examen Réussi</h2>
+            <h2>🎉 Épreuve {$epreuve_name} Réussie !</h2>
         </div>
         
         <div class='content'>
             <p>Bonjour <strong>" . htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']) . "</strong>,</p>
             
-            <p>Nous avons le plaisir de vous informer que vous avez <strong>RÉUSSI</strong> l'examen QCM pour la Certification du Personnel de Sûreté Aviation Civile.</p>
+            <p>Félicitations ! Vous avez <strong>RÉUSSI</strong> l'épreuve <strong>{$epreuve_name}</strong>.</p>
             
             <div class='score-box'>
                 <h3>📊 Votre Résultat</h3>
-                <p style='font-size: 24px; font-weight: bold; color: #059669; margin: 10px 0;'>" . $score . "%</p>
+                <p style='font-size: 24px; font-weight: bold; color: #059669; margin: 10px 0;'>{$score}%</p>
                 <p style='color: #059669; font-weight: bold;'>✅ RÉUSSI</p>
             </div>
             
             <p><strong>Prochaines étapes :</strong></p>
             <ul>
-                <li>Votre certificat sera préparé dans les prochains jours</li>
-                <li>Vous serez contacté pour la remise officielle</li>
-                <li>Conservez cet email comme preuve de votre réussite</li>
+                <li>Continuez avec les autres épreuves de la Phase 1</li>
+                <li>Rappel : TH.B, FBAG, PLP, FMAG (toutes requises)</li>
+                <li>Score minimum 80% pour chaque épreuve</li>
             </ul>
             
-            <p>Toute l'équipe ANACIM vous félicite pour cette réussite !</p>
+            <p>Continuez sur cette lancée !</p>
         </div>
         
         <div class='footer'>
@@ -151,9 +160,23 @@ function sendSuccessEmail($candidate, $score) {
     return sendEmail($candidate['email'], $subject, $message, true);
 }
 
-// Email d'échec à l'examen
-function sendFailureEmail($candidate, $score) {
-    $subject = "ANACIM - Résultat de votre examen QCM";
+// Email de réussite à l'examen (backward compatibility)
+function sendSuccessEmail($candidate, $score) {
+    return sendEpreuveSuccessEmail($candidate, 'GENERAL', $score);
+}
+
+// Email d'échec d'une épreuve spécifique
+function sendEpreuveFailureEmail($candidate, $epreuve, $score) {
+    $epreuve_names = [
+        'THB' => 'Théorie de Base',
+        'FBAG' => 'Filtrage Bagages', 
+        'PLP' => 'Palpation',
+        'FMAG' => 'Filtrage Magnétomètre',
+        'IMAGERIE' => 'Imagerie'
+    ];
+    $epreuve_name = $epreuve_names[$epreuve] ?? $epreuve;
+    
+    $subject = "ANACIM - Épreuve {$epreuve_name} - Résultat";
     
     $message = "
     <html>
@@ -168,29 +191,29 @@ function sendFailureEmail($candidate, $score) {
     </head>
     <body>
         <div class='header'>
-            <h2>Résultat de votre Examen QCM</h2>
+            <h2>Résultat Épreuve {$epreuve_name}</h2>
         </div>
         
         <div class='content'>
             <p>Bonjour <strong>" . htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']) . "</strong>,</p>
             
-            <p>Nous vous remercions d'avoir passé l'examen QCM pour la Certification du Personnel de Sûreté Aviation Civile.</p>
+            <p>Nous vous remercions d'avoir passé l'épreuve <strong>{$epreuve_name}</strong>.</p>
             
             <div class='score-box'>
                 <h3>📊 Votre Résultat</h3>
-                <p style='font-size: 24px; font-weight: bold; color: #dc2626; margin: 10px 0;'>" . $score . "%</p>
-                <p style='color: #dc2626; font-weight: bold;'>❌ NON ADMIS</p>
+                <p style='font-size: 24px; font-weight: bold; color: #dc2626; margin: 10px 0;'>{$score}%</p>
+                <p style='color: #dc2626; font-weight: bold;'>❌ NON VALIDÉ</p>
                 <p><small>Score minimum requis : 80%</small></p>
             </div>
             
             <p><strong>Prochaines étapes :</strong></p>
             <ul>
-                <li>Vous pouvez vous représenter après une période de formation complémentaire</li>
-                <li>Contactez-nous pour connaître les modalités de représentation</li>
-                <li>Des sessions de formation sont organisées régulièrement</li>
+                <li>Vous pouvez repasser cette épreuve après préparation</li>
+                <li>Révisez les points faibles identifiés</li>
+                <li>Contactez-nous pour des conseils de préparation</li>
             </ul>
             
-            <p>N'hésitez pas à nous contacter pour plus d'informations.</p>
+            <p>Ne vous découragez pas, la réussite est à votre portée !</p>
         </div>
         
         <div class='footer'>
@@ -201,5 +224,81 @@ function sendFailureEmail($candidate, $score) {
     </html>";
     
     return sendEmail($candidate['email'], $subject, $message, true);
+}
+
+// Email d'admission à la Phase 2
+function sendPhase2AdmissionEmail($candidate, $last_epreuve, $score) {
+    $subject = "ANACIM - 🎉 ADMISSION PHASE 2 - IMAGERIE";
+    
+    $message = "
+    <html>
+    <head>
+        <style>
+            body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
+            .header { background: linear-gradient(135deg, #1e3a8a, #3b82f6); color: white; padding: 30px; text-align: center; }
+            .content { padding: 30px; }
+            .celebration { background: #f0f9ff; padding: 25px; border-radius: 10px; margin: 20px 0; text-align: center; border: 2px solid #3b82f6; }
+            .epreuves-list { background: #ecfdf5; padding: 20px; border-radius: 8px; margin: 20px 0; }
+            .footer { background: #f8f9fa; padding: 15px; text-align: center; font-size: 12px; color: #666; }
+        </style>
+    </head>
+    <body>
+        <div class='header'>
+            <h1>🎉 FÉLICITATIONS EXCEPTIONNELLES ! 🎉</h1>
+            <h2>ADMISSION À LA PHASE 2 - IMAGERIE</h2>
+        </div>
+        
+        <div class='content'>
+            <p>Bonjour <strong>" . htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']) . "</strong>,</p>
+            
+            <div class='celebration'>
+                <h2 style='color: #1e3a8a; margin-bottom: 15px;'>🚀 BRAVO ! PHASE 1 COMPLÈTEMENT RÉUSSIE !</h2>
+                <p style='font-size: 18px; font-weight: bold; color: #059669;'>Vous avez obtenu au minimum 80% à TOUTES les épreuves !</p>
+            </div>
+            
+            <p>Nous avons l'immense plaisir de vous informer que vous avez <strong>BRILLAMMENT RÉUSSI</strong> toutes les épreuves de la Phase 1 - Filtrage des personnes et bagages.</p>
+            
+            <div class='epreuves-list'>
+                <h3 style='color: #059669;'>✅ Épreuves Phase 1 Validées :</h3>
+                <ul style='list-style: none; padding: 0;'>
+                    <li style='padding: 5px 0;'><strong>✅ TH.B</strong> - Théorie de Base</li>
+                    <li style='padding: 5px 0;'><strong>✅ FBAG</strong> - Filtrage Bagages</li>
+                    <li style='padding: 5px 0;'><strong>✅ PLP</strong> - Palpation</li>
+                    <li style='padding: 5px 0;'><strong>✅ FMAG</strong> - Filtrage Magnétomètre</li>
+                </ul>
+                <p style='margin-top: 15px; font-weight: bold; color: #1e3a8a;'>Dernière épreuve validée : {$last_epreuve} avec {$score}%</p>
+            </div>
+            
+            <div style='background: #fef3c7; padding: 20px; border-radius: 8px; border-left: 4px solid #f59e0b; margin: 20px 0;'>
+                <h3 style='color: #92400e;'>🎯 VOUS ÊTES MAINTENANT ADMIS(E) À LA PHASE 2 !</h3>
+                <p><strong>Phase 2 - IMAGERIE</strong> : Vous pouvez désormais accéder aux épreuves d'imagerie.</p>
+            </div>
+            
+            <p><strong>Prochaines étapes :</strong></p>
+            <ul>
+                <li>Accès immédiat à la Phase 2 - Imagerie</li>
+                <li>Vous recevrez les détails du planning sous peu</li>
+                <li>Conservez cet email comme preuve de votre admission</li>
+                <li>Félicitations pour cette performance exceptionnelle !</li>
+            </ul>
+            
+            <p style='font-size: 18px; font-weight: bold; color: #1e3a8a; text-align: center; margin: 30px 0;'>
+                🏆 TOUTE L'ÉQUIPE ANACIM VOUS FÉLICITE ! 🏆
+            </p>
+        </div>
+        
+        <div class='footer'>
+            <p><strong>ANACIM - Agence Nationale de l'Aviation Civile et de la Météorologie</strong><br>
+            Email: contact@anacim.sn | Tél: +221 33 869 23 23</p>
+        </div>
+    </body>
+    </html>";
+    
+    return sendEmail($candidate['email'], $subject, $message, true);
+}
+
+// Email d'échec à l'examen (backward compatibility)
+function sendFailureEmail($candidate, $score) {
+    return sendEpreuveFailureEmail($candidate, 'GENERAL', $score);
 }
 ?>

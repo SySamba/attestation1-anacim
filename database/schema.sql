@@ -50,21 +50,31 @@ CREATE TABLE IF NOT EXISTS candidate_documents (
 CREATE TABLE IF NOT EXISTS qcm_questions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     question_text TEXT NOT NULL,
-    option_a VARCHAR(500) NOT NULL,
-    option_b VARCHAR(500) NOT NULL,
-    option_c VARCHAR(500) NOT NULL,
-    option_d VARCHAR(500) NOT NULL,
-    correct_answer ENUM('a', 'b', 'c', 'd') NOT NULL,
+    question_type ENUM('single','multiple') NOT NULL DEFAULT 'single',
+    phase ENUM('phase1', 'phase2') NOT NULL DEFAULT 'phase1',
+    epreuve ENUM('THB', 'FBAG', 'PLP', 'FMAG', 'IMAGERIE') NOT NULL DEFAULT 'THB',
     category ENUM('1', '2', '3', '4', '5') NOT NULL,
     difficulty ENUM('easy', 'medium', 'hard') DEFAULT 'medium',
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 );
 
+-- QCM Choices table (for flexible multiple choice support)
+CREATE TABLE IF NOT EXISTS qcm_choices (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    question_id INT NOT NULL,
+    choice_text TEXT NOT NULL,
+    is_correct TINYINT(1) NOT NULL DEFAULT 0,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (question_id) REFERENCES qcm_questions(id) ON DELETE CASCADE
+);
+
 -- QCM Sessions table (for tracking candidate test sessions)
 CREATE TABLE IF NOT EXISTS qcm_sessions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     candidate_id INT NOT NULL,
+    phase ENUM('phase1', 'phase2') NOT NULL DEFAULT 'phase1',
+    epreuve ENUM('THB', 'FBAG', 'PLP', 'FMAG', 'IMAGERIE') NOT NULL DEFAULT 'THB',
     started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     completed_at TIMESTAMP NULL,
     score DECIMAL(5,2) NULL,
@@ -73,6 +83,22 @@ CREATE TABLE IF NOT EXISTS qcm_sessions (
     status ENUM('in_progress', 'completed', 'expired') DEFAULT 'in_progress',
     time_limit_minutes INT DEFAULT 60,
     FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE
+);
+
+-- Table pour suivre les résultats par épreuve et phase
+CREATE TABLE IF NOT EXISTS candidate_phase_results (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    candidate_id INT NOT NULL,
+    phase ENUM('phase1', 'phase2') NOT NULL,
+    epreuve ENUM('THB', 'FBAG', 'PLP', 'FMAG', 'IMAGERIE') NOT NULL,
+    score DECIMAL(5,2) NULL,
+    status ENUM('pending', 'passed', 'failed') DEFAULT 'pending',
+    session_id INT NULL,
+    completed_at TIMESTAMP NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (candidate_id) REFERENCES candidates(id) ON DELETE CASCADE,
+    FOREIGN KEY (session_id) REFERENCES qcm_sessions(id) ON DELETE SET NULL,
+    UNIQUE KEY unique_candidate_phase_epreuve (candidate_id, phase, epreuve)
 );
 
 -- QCM Answers table (for storing candidate answers)

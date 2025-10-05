@@ -180,15 +180,6 @@
             
             <?php if (isset($_SESSION['admin_logged_in']) && $_SESSION['admin_logged_in']): ?>
             <div class="navbar-nav ms-auto">
-                <a class="nav-link" href="admin_dashboard.php">
-                    <i class="fas fa-tachometer-alt"></i> Tableau de Bord
-                </a>
-                <a class="nav-link" href="admin_qcm.php">
-                    <i class="fas fa-list-check"></i> QCM
-                </a>
-                <a class="nav-link" href="admin_results.php">
-                    <i class="fas fa-chart-bar"></i> Résultats
-                </a>
                 <a class="nav-link" href="logout.php">
                     <i class="fas fa-sign-out-alt"></i> Déconnexion
                 </a>

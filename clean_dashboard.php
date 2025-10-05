@@ -55,7 +55,11 @@ include 'includes/header.php';
                         <h4><i class="fas fa-user"></i> Espace Candidat</h4>
                         <p class="mb-0">Bienvenue, <?php echo htmlspecialchars($_SESSION['candidate_name']); ?></p>
                     </div>
-                    
+                    <div>
+                        <a href="candidate_logout.php" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-sign-out-alt"></i> Déconnexion
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -73,9 +77,7 @@ include 'includes/header.php';
                 <p><strong>Nom :</strong> <?php echo htmlspecialchars($candidate['nom']); ?></p>
                 <p><strong>Prénom :</strong> <?php echo htmlspecialchars($candidate['prenom']); ?></p>
                 <p><strong>Email :</strong> <?php echo htmlspecialchars($candidate['email']); ?></p>
-                <?php if (isset($candidate['telephone']) && !empty($candidate['telephone'])): ?>
                 <p><strong>Téléphone :</strong> <?php echo htmlspecialchars($candidate['telephone']); ?></p>
-                <?php endif; ?>
                 <p><strong>Catégorie :</strong> <?php echo htmlspecialchars($candidate['categorie']); ?></p>
                 <p><strong>Statut :</strong> 
                     <span class="badge bg-<?php echo $candidate['status'] === 'accepted' ? 'success' : 'warning'; ?>">

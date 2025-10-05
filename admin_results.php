@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once 'config.php';
 
 // Check if admin is logged in
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
@@ -28,53 +28,78 @@ if ($category_filter !== 'all') {
     $params[] = $category_filter;
 }
 
-if ($status_filter !== 'all') {
-    if ($status_filter === 'completed') {
-        $where_conditions[] = "qs.status = 'completed'";
-    } elseif ($status_filter === 'not_taken') {
-        $where_conditions[] = "qs.id IS NULL";
-    } elseif ($status_filter === 'passed') {
-        $where_conditions[] = "qs.status = 'completed' AND qs.score >= 80";
-    } elseif ($status_filter === 'failed') {
-        $where_conditions[] = "qs.status = 'completed' AND qs.score < 80";
-    }
-}
-
 $where_clause = '';
 if (!empty($where_conditions)) {
     $where_clause = 'WHERE ' . implode(' AND ', $where_conditions);
 }
 
 // Get total count for pagination
-$count_sql = "SELECT COUNT(DISTINCT c.id) as total 
-              FROM candidates c 
-              LEFT JOIN qcm_sessions qs ON c.id = qs.candidate_id AND qs.status = 'completed'
-              $where_clause";
+$count_sql = "SELECT COUNT(*) as total FROM candidates WHERE status = 'accepted'";
 $count_stmt = $pdo->prepare($count_sql);
-$count_stmt->execute($params);
+$count_stmt->execute();
 $total_results = $count_stmt->fetch(PDO::FETCH_ASSOC)['total'];
 $total_pages = ceil($total_results / $results_per_page);
 
-// Get candidates with their QCM results
-$sql = "SELECT c.id, c.prenom, c.nom, c.email, c.matricule, c.categorie, c.status as candidate_status,
-               qs.id as session_id, qs.score, qs.correct_answers, qs.total_questions, 
-               qs.completed_at, qs.status as qcm_status
+// Get all candidates first, then filter by results
+$sql = "SELECT c.id, c.prenom, c.nom, c.email, c.matricule, c.categorie, c.status as candidate_status
         FROM candidates c 
-        LEFT JOIN qcm_sessions qs ON c.id = qs.candidate_id AND qs.status = 'completed'
-        $where_clause
-        ORDER BY qs.completed_at DESC, c.created_at DESC
+        WHERE c.status = 'accepted'
+        ORDER BY c.created_at DESC
         LIMIT :limit OFFSET :offset";
 
 $stmt = $pdo->prepare($sql);
-foreach ($params as $i => $param) {
-    $stmt->bindValue($i + 1, $param);
-}
 $stmt->bindValue(':limit', $results_per_page, PDO::PARAM_INT);
 $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
 $stmt->execute();
-$results = $stmt->fetchAll(PDO::FETCH_ASSOC);
+$candidates = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-// Get statistics
+// Get Phase 1 results for all candidates (THB for categories 2,3,4,5 and THI for category C1)
+$results = [];
+
+foreach ($candidates as $candidate) {
+    $candidate_results = [
+        'candidate' => $candidate,
+        'phase1' => null,
+        'phase2' => null
+    ];
+    
+    // Determine which Phase 1 test based on category
+    $phase1_test = ($candidate['categorie'] == '1') ? 'THI' : 'THB';
+    
+    // Get Phase 1 result
+    $phase1_sql = "SELECT qs.score, qs.correct_answers, qs.total_questions, qs.completed_at, qs.status
+                   FROM qcm_sessions qs 
+                   WHERE qs.candidate_id = ? AND qs.phase = 'phase1' AND qs.epreuve = ?
+                   ORDER BY qs.completed_at DESC LIMIT 1";
+    $phase1_stmt = $pdo->prepare($phase1_sql);
+    $phase1_stmt->execute([$candidate['id'], $phase1_test]);
+    $phase1_result = $phase1_stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($phase1_result) {
+        $phase1_result['test_type'] = $phase1_test;
+        $candidate_results['phase1'] = $phase1_result;
+    }
+    
+    // Get Phase 2 (Pratique Imagerie) result
+    $phase2_sql = "SELECT cpr.score, cpr.status, cpr.completed_at
+                   FROM candidate_phase_results cpr 
+                   WHERE cpr.candidate_id = ? AND cpr.phase = 'phase2' AND cpr.epreuve = 'IMAGERIE'
+                   ORDER BY cpr.completed_at DESC LIMIT 1";
+    $phase2_stmt = $pdo->prepare($phase2_sql);
+    $phase2_stmt->execute([$candidate['id']]);
+    $phase2_result = $phase2_stmt->fetch(PDO::FETCH_ASSOC);
+    
+    if ($phase2_result) {
+        $candidate_results['phase2'] = $phase2_result;
+    }
+    
+    // Only include candidates who have Phase 1 results (THI/THB completed)
+    if ($phase1_result) {
+        $results[] = $candidate_results;
+    }
+}
+
+// Get statistics for Phase 1
 $stats_sql = "SELECT 
     COUNT(DISTINCT c.id) as total_candidates,
     COUNT(DISTINCT CASE WHEN c.status = 'accepted' THEN c.id END) as accepted_candidates,
@@ -83,7 +108,7 @@ $stats_sql = "SELECT
     COUNT(DISTINCT CASE WHEN qs.status = 'completed' AND qs.score < 80 THEN c.id END) as failed_tests,
     AVG(CASE WHEN qs.status = 'completed' THEN qs.score END) as average_score
     FROM candidates c 
-    LEFT JOIN qcm_sessions qs ON c.id = qs.candidate_id AND qs.status = 'completed'
+    LEFT JOIN qcm_sessions qs ON c.id = qs.candidate_id AND qs.status = 'completed' AND qs.phase = 'phase1'
     WHERE c.status = 'accepted'";
 $stats_stmt = $pdo->prepare($stats_sql);
 $stats_stmt->execute();
@@ -98,8 +123,8 @@ include 'includes/header.php';
             <div class="card-header card-header-anacim">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h4><i class="fas fa-chart-bar"></i> Résultats des Examens QCM</h4>
-                        <p class="mb-0">Tableau de bord des notes et performances</p>
+                        <h4><i class="fas fa-chart-bar"></i> Résultats Complets - THI/THB + Pratique Imagerie</h4>
+<p class="mb-0">Candidats ayant passé la pratique imagerie - Éligibilité pour l'oral</p>
                     </div>
                     <div>
                         <a href="admin_dashboard.php" class="btn btn-outline-light btn-sm me-2">
@@ -179,7 +204,7 @@ include 'includes/header.php';
         <div class="card">
             <div class="card-body">
                 <form method="GET" class="row g-3">
-                    <div class="col-md-3">
+                    <div class="col-md-4">
                         <label for="category" class="form-label">Catégorie</label>
                         <select name="category" id="category" class="form-select">
                             <option value="all" <?php echo $category_filter === 'all' ? 'selected' : ''; ?>>Toutes les catégories</option>
@@ -190,23 +215,19 @@ include 'includes/header.php';
                             <option value="5" <?php echo $category_filter === '5' ? 'selected' : ''; ?>>Catégorie 5</option>
                         </select>
                     </div>
-                    <div class="col-md-3">
-                        <label for="status" class="form-label">Statut du Test</label>
-                        <select name="status" id="status" class="form-select">
-                            <option value="all" <?php echo $status_filter === 'all' ? 'selected' : ''; ?>>Tous les statuts</option>
-                            <option value="completed" <?php echo $status_filter === 'completed' ? 'selected' : ''; ?>>Test terminé</option>
-                            <option value="not_taken" <?php echo $status_filter === 'not_taken' ? 'selected' : ''; ?>>Test non passé</option>
-                            <option value="passed" <?php echo $status_filter === 'passed' ? 'selected' : ''; ?>>Réussi (≥80%)</option>
-                            <option value="failed" <?php echo $status_filter === 'failed' ? 'selected' : ''; ?>>Échoué (<80%)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3 d-flex align-items-end">
+                    <div class="col-md-4 d-flex align-items-end">
                         <button type="submit" class="btn btn-anacim me-2">
                             <i class="fas fa-filter"></i> Filtrer
                         </button>
                         <a href="admin_results.php" class="btn btn-outline-secondary">
                             <i class="fas fa-times"></i> Réinitialiser
                         </a>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="alert alert-info mb-0">
+                            <small><i class="fas fa-info-circle me-1"></i>
+                            <strong>Phase 1:</strong> THI (C1) ou THB (2,3,4,5) - <strong>Phase 2:</strong> Pratique Imagerie</small>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -219,7 +240,7 @@ include 'includes/header.php';
     <div class="col-12">
         <div class="card">
             <div class="card-header card-header-anacim">
-                <h5><i class="fas fa-table"></i> Résultats des Candidats</h5>
+                <h5><i class="fas fa-table"></i> Résultats des Candidats - Phase 1 & 2</h5>
             </div>
             <div class="card-body">
                 <?php if (empty($results)): ?>
@@ -235,121 +256,106 @@ include 'includes/header.php';
                                 <tr>
                                     <th>Candidat</th>
                                     <th>Matricule</th>
-                                    <th>Email</th>
                                     <th>Catégorie</th>
-                                    <th>Statut Test</th>
-                                    <th>Score</th>
-                                    <th>Détails</th>
-                                    <th>Date Test</th>
-                                    <th>Résultat</th>
+                                    <th class="text-center">Phase 1 (THI/THB)</th>
+                                    <th class="text-center">Pratique Imagerie</th>
+                                    <th class="text-center">Éligible Oral</th>
                                 </tr>
                             </thead>
                             <tbody>
-                                <?php foreach ($results as $result): ?>
+                                <?php foreach ($results as $result): 
+                                    $candidate = $result['candidate'];
+                                    $phase1 = $result['phase1'];
+                                    $phase2 = $result['phase2'];
+                                    
+                                    // Determine eligibility for oral exam (≥80% in pratique imagerie)
+                                    $eligible_oral = false;
+                                    $status_text = 'Non éligible';
+                                    $status_class = 'danger';
+                                    $status_icon = 'times-circle';
+                                    
+                                    if ($phase2 && $phase2['status'] === 'completed' && $phase2['score'] >= 80) {
+                                        $eligible_oral = true;
+                                        $status_text = '✅ ÉLIGIBLE ORAL';
+                                        $status_class = 'success';
+                                        $status_icon = 'microphone';
+                                    } elseif ($phase2 && $phase2['status'] === 'completed' && $phase2['score'] < 80) {
+                                        $status_text = '❌ Échec Imagerie';
+                                        $status_class = 'danger';
+                                        $status_icon = 'times-circle';
+                                    } elseif ($phase2 && $phase2['status'] === 'pending') {
+                                        $status_text = '⏳ En attente notation';
+                                        $status_class = 'warning';
+                                        $status_icon = 'clock';
+                                    }
+                                ?>
                                 <tr>
                                     <td>
-                                        <strong><?php echo htmlspecialchars($result['prenom'] . ' ' . $result['nom']); ?></strong>
+                                        <strong><?php echo htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']); ?></strong>
+                                        <br><small class="text-muted"><?php echo htmlspecialchars($candidate['email']); ?></small>
                                     </td>
                                     <td>
-                                        <span class="badge bg-secondary"><?php echo htmlspecialchars($result['matricule']); ?></span>
-                                    </td>
-                                    <td><?php echo htmlspecialchars($result['email']); ?></td>
-                                    <td>
-                                        <span class="badge bg-primary">Cat. <?php echo $result['categorie']; ?></span>
+                                        <span class="badge bg-secondary"><?php echo htmlspecialchars($candidate['matricule']); ?></span>
                                     </td>
                                     <td>
-                                        <?php if ($result['qcm_status'] === 'completed'): ?>
-                                            <span class="badge bg-success">
-                                                <i class="fas fa-check me-1"></i>Terminé
-                                            </span>
-                                        <?php else: ?>
-                                            <span class="badge bg-warning text-dark">
-                                                <i class="fas fa-clock me-1"></i>Non passé
-                                            </span>
-                                        <?php endif; ?>
+                                        <span class="badge bg-primary">Cat. <?php echo $candidate['categorie']; ?></span>
                                     </td>
-                                    <td>
-                                        <?php if ($result['score'] !== null): ?>
-                                            <span class="badge <?php echo $result['score'] >= 80 ? 'bg-success' : 'bg-danger'; ?> fs-6">
-                                                <?php echo number_format($result['score'], 1); ?>%
-                                            </span>
-                                        <?php else: ?>
-                                            <span class="text-muted">-</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <?php if ($result['correct_answers'] !== null): ?>
+                                    
+                                    <!-- Phase 1 -->
+                                    <td class="text-center">
+                                        <?php if ($phase1): ?>
+                                            <div class="mb-1">
+                                                <span class="badge bg-info"><?php echo $phase1['test_type']; ?></span>
+                                            </div>
+                                            <strong class="fs-5"><?php echo number_format($phase1['score'], 1); ?>%</strong>
+                                            <br>
                                             <small class="text-muted">
-                                                <?php echo $result['correct_answers']; ?>/<?php echo $result['total_questions']; ?> bonnes réponses
+                                                <?php echo $phase1['correct_answers']; ?>/<?php echo $phase1['total_questions']; ?> questions
                                             </small>
-                                        <?php else: ?>
-                                            <span class="text-muted">-</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <?php if ($result['completed_at']): ?>
-                                            <small><?php echo date('d/m/Y H:i', strtotime($result['completed_at'])); ?></small>
-                                        <?php else: ?>
-                                            <span class="text-muted">-</span>
-                                        <?php endif; ?>
-                                    </td>
-                                    <td>
-                                        <?php if ($result['score'] !== null): ?>
-                                            <?php if ($result['score'] >= 80): ?>
-                                                <span class="badge bg-success">
-                                                    <i class="fas fa-trophy me-1"></i>RÉUSSI
-                                                </span>
+                                            <br>
+                                            <?php if ($phase1['score'] >= 80): ?>
+                                                <span class="badge bg-success">✅ Réussi</span>
                                             <?php else: ?>
-                                                <span class="badge bg-danger">
-                                                    <i class="fas fa-times me-1"></i>ÉCHEC
-                                                </span>
+                                                <span class="badge bg-danger">❌ Échec</span>
                                             <?php endif; ?>
                                         <?php else: ?>
-                                            <span class="badge bg-secondary">
-                                                <i class="fas fa-minus me-1"></i>N/A
-                                            </span>
+                                            <span class="text-muted">Non passé</span>
                                         <?php endif; ?>
+                                    </td>
+                                    
+                                    <!-- Phase 2 -->
+                                    <td class="text-center">
+                                        <?php if ($phase2): ?>
+                                            <?php if ($phase2['status'] === 'pending'): ?>
+                                                <span class="badge bg-warning">⏳ En attente notation</span>
+                                            <?php elseif ($phase2['status'] === 'completed'): ?>
+                                                <strong class="fs-4 <?php echo $phase2['score'] >= 80 ? 'text-success' : 'text-danger'; ?>">
+                                                    <?php echo number_format($phase2['score'], 1); ?>%
+                                                </strong>
+                                                <br>
+                                                <?php if ($phase2['score'] >= 80): ?>
+                                                    <span class="badge bg-success">✅ Réussi</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-danger">❌ Échec</span>
+                                                <?php endif; ?>
+                                            <?php endif; ?>
+                                        <?php else: ?>
+                                            <span class="text-muted">Non passé</span>
+                                        <?php endif; ?>
+                                    </td>
+                                    
+                                    <!-- Éligible Oral -->
+                                    <td class="text-center">
+                                        <span class="badge bg-<?php echo $status_class; ?> fs-6">
+                                            <i class="fas fa-<?php echo $status_icon; ?> me-1"></i>
+                                            <?php echo $status_text; ?>
+                                        </span>
                                     </td>
                                 </tr>
                                 <?php endforeach; ?>
                             </tbody>
                         </table>
                     </div>
-                <?php endif; ?>
-                
-                <!-- Pagination -->
-                <?php if ($total_pages > 1): ?>
-                <div class="d-flex justify-content-between align-items-center mt-4">
-                    <div class="text-muted">
-                        Affichage de <?php echo $offset + 1; ?> à <?php echo min($offset + $results_per_page, $total_results); ?> 
-                        sur <?php echo $total_results; ?> résultats
-                    </div>
-                    <nav aria-label="Navigation des pages">
-                        <ul class="pagination pagination-sm mb-0">
-                            <?php if ($current_page > 1): ?>
-                                <li class="page-item">
-                                    <a class="page-link" href="?page=<?php echo $current_page - 1; ?>&category=<?php echo $category_filter; ?>&status=<?php echo $status_filter; ?>">
-                                        <i class="fas fa-chevron-left"></i> Précédent
-                                    </a>
-                                </li>
-                            <?php endif; ?>
-                            
-                            <?php for ($i = max(1, $current_page - 2); $i <= min($total_pages, $current_page + 2); $i++): ?>
-                                <li class="page-item <?php echo $i == $current_page ? 'active' : ''; ?>">
-                                    <a class="page-link" href="?page=<?php echo $i; ?>&category=<?php echo $category_filter; ?>&status=<?php echo $status_filter; ?>"><?php echo $i; ?></a>
-                                </li>
-                            <?php endfor; ?>
-                            
-                            <?php if ($current_page < $total_pages): ?>
-                                <li class="page-item">
-                                    <a class="page-link" href="?page=<?php echo $current_page + 1; ?>&category=<?php echo $category_filter; ?>&status=<?php echo $status_filter; ?>">
-                                        Suivant <i class="fas fa-chevron-right"></i>
-                                    </a>
-                                </li>
-                            <?php endif; ?>
-                        </ul>
-                    </nav>
-                </div>
                 <?php endif; ?>
             </div>
         </div>

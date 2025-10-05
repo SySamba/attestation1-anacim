@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once 'config.php';
 
 // Check if admin is logged in
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
@@ -66,18 +66,21 @@ include 'includes/header.php';
             <div class="card-header card-header-anacim">
                 <div class="d-flex justify-content-between align-items-center">
                     <div>
-                        <h4><i class="fas fa-tachometer-alt"></i> Tableau de Bord - Certification Sûreté Aviation</h4>
+                        <h4><i class="fas fa-tachometer-alt"></i> Tableau de Bord Administration</h4>
                         <p class="mb-0">Bienvenue, <?php echo htmlspecialchars($_SESSION['admin_username']); ?></p>
                     </div>
                     <div>
-                        <a href="admin_qcm.php" class="btn btn-outline-light btn-sm me-2">
-                            <i class="fas fa-list-check"></i> Gérer QCM
+                        <a href="admin_questions.php" class="btn btn-outline-light btn-sm me-2">
+                            <i class="fas fa-question-circle"></i> Questions QCM
                         </a>
-                        <a href="admin_results.php" class="btn btn-outline-light btn-sm me-2">
-                            <i class="fas fa-chart-bar"></i> Voir les Notes
+                        <a href="admin_imagerie_questions.php" class="btn btn-outline-light btn-sm me-2">
+                            <i class="fas fa-camera"></i> Questions Imagerie
                         </a>
-                        <a href="logout.php" class="btn btn-outline-light btn-sm">
-                            <i class="fas fa-sign-out-alt"></i> Déconnexion
+                        <a href="admin_imagerie.php" class="btn btn-outline-light btn-sm me-2">
+                            <i class="fas fa-camera"></i> Pratique Imagerie
+                        </a>
+                        <a href="admin_results.php" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-chart-bar"></i> Résultats
                         </a>
                     </div>
                 </div>

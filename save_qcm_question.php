@@ -1,87 +1,61 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once 'config.php';
 
-// Ensure admin is logged in
+// Check if admin is logged in
 if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
     header('Location: admin_login.php');
     exit;
 }
 
-function redirect_with($params) {
-    $qs = http_build_query($params);
-    header('Location: admin_qcm.php' . ($qs ? ('?' . $qs) : ''));
+if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
+    header('Location: admin_qcm.php?error=Méthode non autorisée');
     exit;
 }
 
-if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-    redirect_with(['error' => 'Méthode non autorisée.']);
-}
-
-$question_text = trim($_POST['question_text'] ?? '');
-$question_type = $_POST['question_type'] ?? 'single';
-$choices       = $_POST['choices'] ?? [];
-$is_correct    = $_POST['is_correct'] ?? [];
-
-// Basic validations
-if ($question_text === '') {
-    redirect_with(['error' => 'La question est obligatoire.']);
-}
-if (!in_array($question_type, ['single', 'multiple'], true)) {
-    redirect_with(['error' => 'Type de question invalide.']);
-}
-
-// Normalize choices
-$cleanChoices = [];
-foreach ($choices as $idx => $txt) {
-    $t = trim((string)$txt);
-    if ($t !== '') {
-        $cleanChoices[] = $t;
-    }
-}
-
-if (count($cleanChoices) < 2) {
-    redirect_with(['error' => 'Ajoutez au moins deux réponses valides.']);
-}
-
-// Align correctness flags with cleaned choices
-$cleanCorrect = [];
-$srcIndex = 0;
-foreach ($choices as $idx => $_) {
-    if (trim((string)$_) === '') {
-        // skip corresponding correctness flag
-        $srcIndex++;
-        continue;
-    }
-    $flag = isset($is_correct[$srcIndex]) ? ($is_correct[$srcIndex] ? 1 : 0) : 0;
-    $cleanCorrect[] = (int)$flag;
-    $srcIndex++;
-}
-
-if (count($cleanCorrect) !== count($cleanChoices)) {
-    redirect_with(['error' => 'Incohérence dans les réponses/corrections.']);
-}
-
-$correctCount = array_sum($cleanCorrect);
-if ($question_type === 'single') {
-    if ($correctCount !== 1) {
-        redirect_with(['error' => 'Pour un choix unique, sélectionnez exactement une bonne réponse.']);
-    }
-} else { // multiple
-    if ($correctCount < 1) {
-        redirect_with(['error' => 'Sélectionnez au moins une bonne réponse.']);
-    }
-}
-
 try {
-    // Ensure tables exist (idempotent safety). Run DDL OUTSIDE any transaction to avoid implicit commits.
+    $question_text = trim($_POST['question_text'] ?? '');
+    $question_type = $_POST['question_type'] ?? 'single';
+    $phase = $_POST['phase'] ?? 'phase1';
+    $epreuve = $_POST['epreuve'] ?? 'THB';
+    $category = $_POST['category'] ?? '1';
+    $choices = $_POST['choices'] ?? [];
+    $is_correct = $_POST['is_correct'] ?? [];
+    
+    if (empty($question_text)) {
+        throw new Exception('Le texte de la question est requis');
+    }
+    
+    if (count($choices) < 2) {
+        throw new Exception('Au moins deux choix sont requis');
+    }
+    
+    // Clean up choices
+    $choices = array_filter(array_map('trim', $choices));
+    if (count($choices) < 2) {
+        throw new Exception('Au moins deux choix valides sont requis');
+    }
+    
+    // Validate correctness
+    $correct_count = array_sum($is_correct);
+    if ($question_type === 'single' && $correct_count !== 1) {
+        throw new Exception('Une seule réponse correcte est requise pour les questions à choix unique');
+    }
+    if ($question_type === 'multiple' && $correct_count < 1) {
+        throw new Exception('Au moins une réponse correcte est requise pour les questions à choix multiples');
+    }
+    
+    // Ensure tables exist with new structure
     $pdo->exec("CREATE TABLE IF NOT EXISTS qcm_questions (
         id INT AUTO_INCREMENT PRIMARY KEY,
         question_text TEXT NOT NULL,
         question_type ENUM('single','multiple') NOT NULL DEFAULT 'single',
+        phase ENUM('phase1', 'phase2') NOT NULL DEFAULT 'phase1',
+        epreuve ENUM('THB', 'FBAG', 'PLP', 'FMAG', 'IMAGERIE') NOT NULL DEFAULT 'THB',
+        category ENUM('1', '2', '3', '4', '5') NOT NULL DEFAULT '1',
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
+    
     $pdo->exec("CREATE TABLE IF NOT EXISTS qcm_choices (
         id INT AUTO_INCREMENT PRIMARY KEY,
         question_id INT NOT NULL,
@@ -90,27 +64,37 @@ try {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         FOREIGN KEY (question_id) REFERENCES qcm_questions(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
-
-    // Start transaction for the data inserts only
+    
     $pdo->beginTransaction();
-
-    // Insert question
-    $insQ = $pdo->prepare("INSERT INTO qcm_questions (question_text, question_type) VALUES (?, ?)");
-    $insQ->execute([$question_text, $question_type]);
-    $questionId = (int)$pdo->lastInsertId();
-
+    
+    // Insert question with phase and epreuve
+    $stmt = $pdo->prepare("INSERT INTO qcm_questions (question_text, question_type, phase, epreuve, category) VALUES (?, ?, ?, ?, ?)");
+    $stmt->execute([$question_text, $question_type, $phase, $epreuve, $category]);
+    $question_id = $pdo->lastInsertId();
+    
     // Insert choices
-    $insC = $pdo->prepare("INSERT INTO qcm_choices (question_id, choice_text, is_correct) VALUES (?, ?, ?)");
-    foreach ($cleanChoices as $i => $txt) {
-        $insC->execute([$questionId, $txt, $cleanCorrect[$i]]);
+    $stmt = $pdo->prepare("INSERT INTO qcm_choices (question_id, choice_text, is_correct) VALUES (?, ?, ?)");
+    foreach ($choices as $index => $choice_text) {
+        $is_correct_flag = isset($is_correct[$index]) && $is_correct[$index] == '1' ? 1 : 0;
+        $stmt->execute([$question_id, $choice_text, $is_correct_flag]);
     }
-
+    
     $pdo->commit();
-    redirect_with(['success' => 1]);
+    
+    header('Location: admin_qcm.php?success=1');
+    exit;
+    
 } catch (Exception $e) {
     if ($pdo->inTransaction()) {
-        try { $pdo->rollBack(); } catch (Exception $ignored) {}
+        $pdo->rollBack();
     }
-    // Avoid exposing internal driver messages directly; provide concise error
-    redirect_with(['error' => "Erreur lors de l'enregistrement. Veuillez réessayer."]); 
+    header('Location: admin_qcm.php?error=' . urlencode($e->getMessage()));
+    exit;
+} catch (PDOException $e) {
+    if ($pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+    header('Location: admin_qcm.php?error=Erreur de base de données');
+    exit;
 }
+?>

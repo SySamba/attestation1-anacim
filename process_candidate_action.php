@@ -1,6 +1,6 @@
 <?php
 session_start();
-require_once 'config/database.php';
+require_once 'config.php';
 require_once 'send_email.php';
 
 // Check if admin is logged in
