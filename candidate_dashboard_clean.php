@@ -319,7 +319,7 @@ include 'includes/header.php';
                                     <?php else: ?>
                                         <span class="badge bg-primary mb-2">🎯 DISPONIBLE</span>
                                         <p class="text-muted mb-3">Épreuve pratique d'analyse d'images</p>
-                                        <a href="candidate_imagerie.php" class="btn btn-anacim btn-lg">
+                                        <a href="candidate_imagerie_interactive.php" class="btn btn-anacim btn-lg">
                                             <i class="fas fa-play me-2"></i>Commencer la Pratique Imagerie
                                         </a>
                                     <?php endif; ?>

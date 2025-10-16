@@ -9,28 +9,9 @@ if (!$candidate_id) {
     exit;
 }
 
-// Get phase and epreuve from URL parameters
-$phase = $_GET['phase'] ?? 'phase1';
-$epreuve = $_GET['epreuve'] ?? 'THB';
-
-// Validate phase and epreuve
-$valid_phases = ['phase1', 'phase2'];
-$valid_epreuves = ['THB', 'THI', 'IMAGERIE'];
-
-if (!in_array($phase, $valid_phases) || !in_array($epreuve, $valid_epreuves)) {
-    header('Location: candidate_dashboard.php');
-    exit;
-}
-
-// Check if epreuve matches phase
-if ($phase === 'phase1' && !in_array($epreuve, ['THB', 'THI'])) {
-    header('Location: candidate_dashboard.php');
-    exit;
-}
-if ($phase === 'phase2' && $epreuve !== 'IMAGERIE') {
-    header('Location: candidate_dashboard.php');
-    exit;
-}
+// Force THI for this file
+$phase = 'phase1';
+$epreuve = 'THI';
 
 // Get candidate info
 $stmt = $pdo->prepare("SELECT * FROM candidates WHERE id = ? AND status = 'accepted'");
@@ -41,40 +22,35 @@ if (!$candidate) {
     die('Candidat non trouvé ou non autorisé à passer le test');
 }
 
-// Validate access based on candidate category - SAME LOGIC FOR THI AND THB
-if ($phase === 'phase1') {
-    if ($candidate['categorie'] == '1' && $epreuve !== 'THI') {
-        $_SESSION['error_message'] = "Les candidats de catégorie C1 doivent passer le test THI (Théorie Imagerie).";
-        header('Location: candidate_dashboard.php');
-        exit;
-    }
-    if (in_array($candidate['categorie'], ['2', '3', '4', '5']) && $epreuve !== 'THB') {
-        $_SESSION['error_message'] = "Les candidats des catégories 2, 3, 4, 5 doivent passer le test THB (Théorie de Base).";
-        header('Location: candidate_dashboard.php');
-        exit;
-    }
+// Validate access - ONLY CATEGORY 1 CAN ACCESS THI
+if ($candidate['categorie'] != '1') {
+    $_SESSION['error_message'] = "Seuls les candidats de catégorie C1 peuvent passer le test THI.";
+    header('Location: candidate_dashboard.php');
+    exit;
 }
 
-// Check if candidate already has a completed session for this specific phase/epreuve
+// Check if candidate already has a completed session for THI - SAME AS THB
 $stmt = $pdo->prepare("SELECT * FROM qcm_sessions WHERE candidate_id = ? AND phase = ? AND epreuve = ? AND status = 'completed' ORDER BY started_at DESC LIMIT 1");
 $stmt->execute([$candidate_id, $phase, $epreuve]);
 $completed_session = $stmt->fetch(PDO::FETCH_ASSOC);
 
-// FORCE redirect if completed - prevent retaking (NO EXCEPTIONS)
+// FORCE redirect if completed - prevent retaking (SAME AS THB)
 if ($completed_session) {
     $_SESSION['error_message'] = "Vous avez déjà passé le test " . $epreuve . ". Une seule tentative est autorisée par épreuve.";
-    // Force redirect with absolute path and immediate termination
     header('Location: candidate_dashboard.php');
     header('Connection: close');
+    header('Cache-Control: no-cache, no-store, must-revalidate');
+    header('Pragma: no-cache');
+    header('Expires: 0');
     exit();
 }
 
-// Check for in-progress session
+// Check for in-progress session - SAME AS THB
 $stmt = $pdo->prepare("SELECT * FROM qcm_sessions WHERE candidate_id = ? AND phase = ? AND epreuve = ? AND status = 'in_progress' ORDER BY started_at DESC LIMIT 1");
 $stmt->execute([$candidate_id, $phase, $epreuve]);
 $existing_session = $stmt->fetch(PDO::FETCH_ASSOC);
 
-$page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['nom'];
+$page_title = "ANACIM - Test THI - " . $candidate['prenom'] . " " . $candidate['nom'];
 ?>
 
 <!DOCTYPE html>
@@ -133,7 +109,7 @@ $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['
         <div class="container">
             <a class="navbar-brand text-white" href="#">
                 <img src="logo-anacim.png" alt="ANACIM" height="40" class="me-2">
-                ANACIM - Test QCM
+                ANACIM - Test THI
             </a>
             <div class="navbar-nav ms-auto">
                 <span class="navbar-text text-white me-3">
@@ -161,7 +137,7 @@ $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['
 
     <div class="container mt-4">
         <?php if ($completed_session): ?>
-            <!-- Show results if test is completed -->
+            <!-- Show results if test is completed - SAME AS THB -->
             <div class="row justify-content-center">
                 <div class="col-md-8">
                     <div class="row">
@@ -186,7 +162,7 @@ $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['
                             <div class="mb-4">
                                 <i class="fas fa-check-circle text-success" style="font-size: 4rem;"></i>
                             </div>
-                            <h5>Félicitations ! Vous avez terminé le test QCM</h5>
+                            <h5>Félicitations ! Vous avez terminé le test THI</h5>
                             <div class="row mt-4">
                                 <div class="col-md-4">
                                     <div class="card bg-light">
@@ -238,18 +214,18 @@ $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['
             </div>
         
         <?php elseif ($existing_session && $existing_session['status'] === 'in_progress'): ?>
-            <!-- Continue existing test -->
+            <!-- Continue existing test - SAME AS THB -->
             <div id="test-interface" style="display: block;">
                 <!-- Test interface will be loaded here -->
             </div>
         
         <?php else: ?>
-            <!-- Start new test -->
+            <!-- Start new test - SAME AS THB -->
             <div class="row justify-content-center">
                 <div class="col-md-8">
                     <div class="card">
                         <div class="card-header card-header-anacim text-center">
-                            <h4><i class="fas fa-clipboard-list"></i> Test QCM - Certification Sûreté Aviation</h4>
+                            <h4><i class="fas fa-camera"></i> Test THI - Théorie Imagerie</h4>
                         </div>
                         <div class="card-body">
                             <div class="text-center mb-4">
@@ -260,10 +236,10 @@ $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['
                             <div class="alert alert-info">
                                 <h6><i class="fas fa-exclamation-circle me-2"></i>Instructions importantes :</h6>
                                 <ul class="mb-0">
-                                    <li>Ce test contient des questions sur la sûreté aviation</li>
+                                    <li>Ce test contient des questions sur la théorie de l'imagerie de sécurité</li>
                                     <li>Durée limitée : <strong>60 minutes</strong></li>
                                     <li>Score minimum requis : <strong>80%</strong></li>
-                                    <li>Une seule tentative autorisée</li>
+                                    <li><strong>Une seule tentative autorisée</strong></li>
                                     <li>Toutes les questions doivent être répondues</li>
                                 </ul>
                             </div>
@@ -276,7 +252,7 @@ $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['
                             
                             <div class="text-center">
                                 <button id="start-test" class="btn btn-anacim btn-lg">
-                                    <i class="fas fa-play me-2"></i>Commencer le Test
+                                    <i class="fas fa-play me-2"></i>Commencer le Test THI
                                 </button>
                             </div>
                         </div>
@@ -345,6 +321,7 @@ $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['
             });
         }
         
+        // SAME JAVASCRIPT AS THB - COPY EXACT FUNCTIONS
         function resumeTest(sessionId) {
             fetch('qcm_api.php', {
                 method: 'POST',
@@ -419,7 +396,7 @@ $page_title = "ANACIM - Test QCM - " . $candidate['prenom'] . " " . $candidate['
                             <div class="card-header">
                                 <div class="d-flex justify-content-between align-items-center">
                                     <h5 class="mb-0">Question ${index + 1} sur ${questions.length}</h5>
-                                    <span class="badge bg-primary">Catégorie ${question.category}</span>
+                                    <span class="badge bg-primary">THI - Catégorie ${question.category}</span>
                                 </div>
                                 <div class="progress mt-2" style="height: 5px;">
                                     <div class="progress-bar progress-bar-anacim" style="width: ${progressPercent}%"></div>

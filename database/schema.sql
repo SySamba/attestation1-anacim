@@ -114,6 +114,63 @@ CREATE TABLE IF NOT EXISTS qcm_answers (
     UNIQUE KEY unique_session_question (session_id, question_id)
 );
 
+-- Tables pour le nouveau système d'examen d'imagerie interactif
+CREATE TABLE IF NOT EXISTS imagerie_questions_interactive (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    image_path VARCHAR(500) NOT NULL,
+    correct_answer_type ENUM('pass', 'object_found') NOT NULL,
+    object_category ENUM(
+        'substances_explosives', 
+        'objets_tranchants', 
+        'outils_travail', 
+        'equipements_projectiles', 
+        'appareils_paralysants', 
+        'instruments_contondants', 
+        'lags'
+    ) NULL,
+    correct_x_position INT NULL,
+    correct_y_position INT NULL,
+    tolerance_radius INT DEFAULT 50,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    created_by INT NULL,
+    is_active BOOLEAN DEFAULT TRUE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS imagerie_sessions_interactive (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    candidate_id INT NOT NULL,
+    started_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP NULL,
+    status ENUM('in_progress', 'completed', 'timeout') DEFAULT 'in_progress',
+    total_questions INT DEFAULT 0,
+    correct_answers INT DEFAULT 0,
+    score DECIMAL(5,2) NULL,
+    time_spent INT NULL -- en secondes
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS imagerie_responses_interactive (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    session_id INT NOT NULL,
+    question_id INT NOT NULL,
+    question_order INT NOT NULL,
+    response_type ENUM('pass', 'object_found') NOT NULL,
+    selected_category ENUM(
+        'substances_explosives', 
+        'objets_tranchants', 
+        'outils_travail', 
+        'equipements_projectiles', 
+        'appareils_paralysants', 
+        'instruments_contondants', 
+        'lags'
+    ) NULL,
+    clicked_x_position INT NULL,
+    clicked_y_position INT NULL,
+    time_spent INT NOT NULL, -- temps passé sur cette question en secondes
+    is_correct BOOLEAN NULL,
+    submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (session_id) REFERENCES imagerie_sessions_interactive(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- Insert default admin user (password: admin123)
 INSERT INTO admin_users (username, password, email) VALUES 
 ('admin', '$2y$10$e0MYzXyjpJS7Pd0RVvHqHOmcYGdkwdJmjsRWwrjCOCOI8t7ZXJQSK', 'admin@anacim.sn');

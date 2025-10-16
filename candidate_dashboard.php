@@ -55,7 +55,11 @@ include 'includes/header.php';
                         <h4><i class="fas fa-user"></i> Espace Candidat</h4>
                         <p class="mb-0">Bienvenue, <?php echo htmlspecialchars($_SESSION['candidate_name']); ?></p>
                     </div>
-                    
+                    <div>
+                        <a href="candidate_logout.php" class="btn btn-outline-light btn-sm">
+                            <i class="fas fa-sign-out-alt"></i> Déconnexion
+                        </a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -73,9 +77,7 @@ include 'includes/header.php';
                 <p><strong>Nom :</strong> <?php echo htmlspecialchars($candidate['nom']); ?></p>
                 <p><strong>Prénom :</strong> <?php echo htmlspecialchars($candidate['prenom']); ?></p>
                 <p><strong>Email :</strong> <?php echo htmlspecialchars($candidate['email']); ?></p>
-                <?php if (isset($candidate['telephone']) && !empty($candidate['telephone'])): ?>
-                <p><strong>Téléphone :</strong> <?php echo htmlspecialchars($candidate['telephone']); ?></p>
-                <?php endif; ?>
+                <p><strong>Téléphone :</strong> <?php echo htmlspecialchars($candidate['telephone'] ?? 'Non renseigné'); ?></p>
                 <p><strong>Catégorie :</strong> <?php echo htmlspecialchars($candidate['categorie']); ?></p>
                 <p><strong>Statut :</strong> 
                     <span class="badge bg-<?php echo $candidate['status'] === 'accepted' ? 'success' : 'warning'; ?>">
@@ -317,7 +319,7 @@ include 'includes/header.php';
                                     <?php else: ?>
                                         <span class="badge bg-primary mb-2">🎯 DISPONIBLE</span>
                                         <p class="text-muted mb-3">Épreuve pratique d'analyse d'images</p>
-                                        <a href="candidate_imagerie.php" class="btn btn-anacim btn-lg">
+                                        <a href="candidate_imagerie_interactive.php" class="btn btn-anacim btn-lg">
                                             <i class="fas fa-play me-2"></i>Commencer la Pratique Imagerie
                                         </a>
                                     <?php endif; ?>

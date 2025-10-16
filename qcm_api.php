@@ -1,6 +1,16 @@
 <?php
+// Prevent any HTML output before JSON
+error_reporting(0);
+ini_set('display_errors', 0);
+
+// Start output buffering to catch any unwanted output
+ob_start();
+
 session_start();
 require_once 'config.php';
+
+// Clean any output that might have been generated
+ob_clean();
 
 header('Content-Type: application/json');
 
@@ -54,8 +64,15 @@ try {
             }
             
             // Get questions for specific phase and epreuve
-            $stmt = $pdo->prepare("SELECT * FROM qcm_questions WHERE phase = ? AND epreuve = ? AND category = ? ORDER BY RAND() LIMIT 20");
-            $stmt->execute([$phase, $epreuve, $category]);
+            if ($epreuve === 'THI') {
+                // THI is only for category 1
+                $stmt = $pdo->prepare("SELECT * FROM qcm_questions WHERE phase = ? AND epreuve = ? AND category = '1' ORDER BY RAND() LIMIT 20");
+                $stmt->execute([$phase, $epreuve]);
+            } else {
+                // THB and other tests - get questions for all categories or specific category
+                $stmt = $pdo->prepare("SELECT * FROM qcm_questions WHERE phase = ? AND epreuve = ? ORDER BY RAND() LIMIT 20");
+                $stmt->execute([$phase, $epreuve]);
+            }
             
             $questions_raw = $stmt->fetchAll(PDO::FETCH_ASSOC);
             
@@ -333,22 +350,62 @@ try {
             $stmt->execute([$session_id]);
             $session_info = $stmt->fetch(PDO::FETCH_ASSOC);
             
-            // Update candidate phase results
-            $stmt = $pdo->prepare("INSERT INTO candidate_phase_results (candidate_id, phase, epreuve, score, status, session_id, completed_at) 
-                                  VALUES (?, ?, ?, ?, ?, ?, NOW()) 
-                                  ON DUPLICATE KEY UPDATE score = ?, status = ?, session_id = ?, completed_at = NOW()");
+            // Update candidate phase results - handle session_id column existence
             $result_status = $score >= 80 ? 'passed' : 'failed';
-            $stmt->execute([
-                $session_info['candidate_id'], 
-                $session_info['phase'], 
-                $session_info['epreuve'], 
-                $score, 
-                $result_status, 
-                $session_id,
-                $score, 
-                $result_status, 
-                $session_id
-            ]);
+            
+            // Log for debugging
+            error_log("QCM API: Saving result for candidate {$session_info['candidate_id']}, phase {$session_info['phase']}, epreuve {$session_info['epreuve']}, score $score, status $result_status");
+            
+            try {
+                $stmt = $pdo->prepare("INSERT INTO candidate_phase_results (candidate_id, phase, epreuve, score, status, session_id, completed_at) 
+                                      VALUES (?, ?, ?, ?, ?, ?, NOW()) 
+                                      ON DUPLICATE KEY UPDATE score = ?, status = ?, session_id = ?, completed_at = NOW()");
+                $result = $stmt->execute([
+                    $session_info['candidate_id'], 
+                    $session_info['phase'], 
+                    $session_info['epreuve'], 
+                    $score, 
+                    $result_status, 
+                    $session_id,
+                    $score, 
+                    $result_status, 
+                    $session_id
+                ]);
+                
+                if ($result) {
+                    error_log("QCM API: Successfully saved result with session_id");
+                } else {
+                    error_log("QCM API: Failed to save result with session_id");
+                }
+                
+            } catch (PDOException $e) {
+                error_log("QCM API: Error with session_id: " . $e->getMessage());
+                
+                // If session_id column doesn't exist, try without it
+                if (strpos($e->getMessage(), 'session_id') !== false) {
+                    $stmt = $pdo->prepare("INSERT INTO candidate_phase_results (candidate_id, phase, epreuve, score, status, completed_at) 
+                                          VALUES (?, ?, ?, ?, ?, NOW()) 
+                                          ON DUPLICATE KEY UPDATE score = ?, status = ?, completed_at = NOW()");
+                    $result = $stmt->execute([
+                        $session_info['candidate_id'], 
+                        $session_info['phase'], 
+                        $session_info['epreuve'], 
+                        $score, 
+                        $result_status,
+                        $score, 
+                        $result_status
+                    ]);
+                    
+                    if ($result) {
+                        error_log("QCM API: Successfully saved result without session_id");
+                    } else {
+                        error_log("QCM API: Failed to save result without session_id");
+                    }
+                } else {
+                    error_log("QCM API: Different error, rethrowing: " . $e->getMessage());
+                    throw $e;
+                }
+            }
             
             // Récupérer les infos du candidat pour l'email
             $stmt = $pdo->prepare("
@@ -377,18 +434,23 @@ try {
                 }
             }
             
-            // Envoyer email selon le résultat
+            // Envoyer email selon le résultat (optionnel, ne pas bloquer si erreur)
             if ($candidate && $candidate['email']) {
-                require_once 'send_email.php';
-                
-                if ($score >= 80) {
-                    if ($phase1_passed) {
-                        sendPhase2AdmissionEmail($candidate, $session_info['epreuve'], round($score, 2));
+                try {
+                    require_once 'send_email.php';
+                    
+                    if ($score >= 80) {
+                        if ($phase1_passed) {
+                            sendPhase2AdmissionEmail($candidate, $session_info['epreuve'], round($score, 2));
+                        } else {
+                            sendEpreuveSuccessEmail($candidate, $session_info['epreuve'], round($score, 2));
+                        }
                     } else {
-                        sendEpreuveSuccessEmail($candidate, $session_info['epreuve'], round($score, 2));
+                        sendEpreuveFailureEmail($candidate, $session_info['epreuve'], round($score, 2));
                     }
-                } else {
-                    sendEpreuveFailureEmail($candidate, $session_info['epreuve'], round($score, 2));
+                } catch (Exception $email_error) {
+                    // Log error but don't fail the submission
+                    error_log("Email error: " . $email_error->getMessage());
                 }
             }
             
@@ -397,7 +459,8 @@ try {
                 'score' => round($score, 2),
                 'correct_answers' => $correct_count,
                 'total_questions' => $total_questions,
-                'passed' => $score >= 80
+                'passed' => $score >= 80,
+                'redirect_url' => 'candidate_qcm_results.php?phase=' . urlencode($session_info['phase']) . '&epreuve=' . urlencode($session_info['epreuve'])
             ]);
             break;
             

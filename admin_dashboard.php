@@ -11,7 +11,7 @@ if (!isset($_SESSION['admin_logged_in']) || !$_SESSION['admin_logged_in']) {
 $page_title = "ANACIM - Tableau de Bord Administration";
 
 // Pagination settings
-$candidates_per_page = 10;
+$candidates_per_page = 5;
 $current_page = isset($_GET['page']) ? (int)$_GET['page'] : 1;
 $offset = ($current_page - 1) * $candidates_per_page;
 
@@ -73,11 +73,11 @@ include 'includes/header.php';
                         <a href="admin_questions.php" class="btn btn-outline-light btn-sm me-2">
                             <i class="fas fa-question-circle"></i> Questions QCM
                         </a>
-                        <a href="admin_imagerie_questions.php" class="btn btn-outline-light btn-sm me-2">
-                            <i class="fas fa-camera"></i> Questions Imagerie
+                        <a href="admin_imagerie_interactive.php" class="btn btn-outline-light btn-sm me-2">
+                            <i class="fas fa-camera"></i> Examen Pratique Imagerie
                         </a>
-                        <a href="admin_imagerie.php" class="btn btn-outline-light btn-sm me-2">
-                            <i class="fas fa-camera"></i> Pratique Imagerie
+                        <a href="admin_imagerie_interactive_results.php" class="btn btn-outline-light btn-sm me-2">
+                            <i class="fas fa-chart-line"></i> Résultats Imagerie Interactive
                         </a>
                         <a href="admin_results.php" class="btn btn-outline-light btn-sm">
                             <i class="fas fa-chart-bar"></i> Résultats
@@ -208,13 +208,13 @@ include 'includes/header.php';
                 <table class="table table-hover">
                     <thead class="table-light">
                         <tr>
-                            <th>Réf.</th>
+                            
                             <th>Nom Complet</th>
-                            <th>CNI</th>
+                            
                             <th>Email</th>
                             <th>Catégorie</th>
                             <th>Statut</th>
-                            <th>Documents</th>
+                            
                             <th>Date Soumission</th>
                             <th>Actions</th>
                         </tr>
@@ -222,35 +222,14 @@ include 'includes/header.php';
                     <tbody>
                         <?php foreach ($candidates as $candidate): ?>
                         <tr class="candidate-row" data-category="<?php echo $candidate['categorie']; ?>" data-status="<?php echo $candidate['status']; ?>">
-                            <td>
-                                <span class="badge bg-anacim-yellow text-dark">
-                                    <?php echo str_pad($candidate['id'], 6, '0', STR_PAD_LEFT); ?>
-                                </span>
-                            </td>
+                            
                             <td>
                                 <strong><?php echo htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']); ?></strong>
                                 <?php if ($candidate['matricule']): ?>
                                     <br><small class="text-muted">Mat: <?php echo htmlspecialchars($candidate['matricule']); ?></small>
                                 <?php endif; ?>
                             </td>
-                            <td>
-                                <?php if ($candidate['cni_file_name']): ?>
-                                    <div class="d-flex align-items-center">
-                                        <i class="fas fa-file-pdf text-danger me-2"></i>
-                                        <div>
-                                            
-                                            <a href="view_file.php?id=<?php echo $candidate['cni_doc_id']; ?>" 
-                                               class="btn btn-sm btn-outline-primary" target="_blank">
-                                                <i class="fas fa-eye"></i> Voir
-                                            </a>
-                                        </div>
-                                    </div>
-                                <?php else: ?>
-                                    <span class="text-danger">
-                                        <i class="fas fa-exclamation-triangle"></i> CNI manquante
-                                    </span>
-                                <?php endif; ?>
-                            </td>
+                            
                             <td>
                                 <?php if ($candidate['email']): ?>
                                     <a href="mailto:<?php echo htmlspecialchars($candidate['email']); ?>">
@@ -297,11 +276,7 @@ include 'includes/header.php';
                                     </small>
                                 <?php endif; ?>
                             </td>
-                            <td>
-                                <span class="badge bg-info">
-                                    <?php echo $candidate['document_count']; ?> document(s)
-                                </span>
-                            </td>
+                            
                             <td>
                                 <small><?php echo date('d/m/Y H:i', strtotime($candidate['created_at'])); ?></small>
                             </td>
@@ -322,13 +297,15 @@ include 'includes/header.php';
                                     <button class="btn btn-success btn-sm accept-candidate" 
                                             data-candidate-id="<?php echo $candidate['id']; ?>" 
                                             data-candidate-name="<?php echo htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']); ?>"
-                                            title="Accepter le candidat">
+                                            title="Accepter le candidat"
+                                            onclick="this.disabled=true;">
                                         <i class="fas fa-check"></i> Accepter
                                     </button>
                                     <button class="btn btn-danger btn-sm reject-candidate" 
                                             data-candidate-id="<?php echo $candidate['id']; ?>" 
                                             data-candidate-name="<?php echo htmlspecialchars($candidate['prenom'] . ' ' . $candidate['nom']); ?>"
-                                            title="Refuser le candidat">
+                                            title="Refuser le candidat"
+                                            onclick="this.disabled=true;">
                                         <i class="fas fa-times"></i> Refuser
                                     </button>
                                 </div>
@@ -558,6 +535,7 @@ document.addEventListener('DOMContentLoaded', function() {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/json',
+                'Accept': 'application/json'
             },
             body: JSON.stringify({
                 candidate_id: candidateId,
@@ -565,24 +543,70 @@ document.addEventListener('DOMContentLoaded', function() {
                 rejection_reason: reason
             })
         })
-        .then(response => response.json())
+        .then(response => {
+            console.log('Response status:', response.status);
+            console.log('Response headers:', response.headers);
+            
+            // Check if response is ok
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+            
+            // Check content type
+            const contentType = response.headers.get('content-type');
+            if (!contentType || !contentType.includes('application/json')) {
+                return response.text().then(text => {
+                    console.error('Non-JSON response:', text);
+                    throw new Error('Réponse non-JSON reçue du serveur');
+                });
+            }
+            
+            return response.json();
+        })
         .then(data => {
-            if (data.success) {
+            console.log('Response data:', data);
+            
+            if (data && data.success) {
+                // Show success message and reload immediately
+                const row = button.closest('tr');
+                row.style.backgroundColor = '#d4edda';
+                row.style.transition = 'background-color 0.5s';
+                
+                // Update button to show success state
+                button.innerHTML = '<i class="fas fa-check"></i> Traité';
+                button.className = 'btn btn-outline-success btn-sm w-100';
+                
                 // Show success message
-                alert(data.message);
-                // Reload the page to show updated status
-                location.reload();
+                setTimeout(() => {
+                    alert(data.message);
+                    location.reload();
+                }, 500);
             } else {
-                alert('Erreur: ' + data.message);
+                const errorMsg = data && data.message ? data.message : 'Erreur inconnue';
+                alert('Erreur: ' + errorMsg);
                 button.innerHTML = originalText;
                 button.disabled = false;
             }
         })
         .catch(error => {
-            console.error('Error:', error);
-            alert('Erreur de communication avec le serveur');
+            console.error('Error details:', error);
+            
+            // More specific error handling
+            let errorMessage = 'Erreur de communication avec le serveur';
+            if (error.message) {
+                errorMessage += ': ' + error.message;
+            }
+            
+            alert(errorMessage);
             button.innerHTML = originalText;
             button.disabled = false;
+            
+            // Check if action actually worked despite the error
+            setTimeout(() => {
+                if (confirm('L\'action a peut-être réussi malgré l\'erreur. Voulez-vous actualiser la page pour vérifier ?')) {
+                    location.reload();
+                }
+            }, 1000);
         });
     }
     
