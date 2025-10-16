@@ -67,19 +67,22 @@ include 'includes/header.php';
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="email" class="form-label">Email</label>
-                            <input type="email" class="form-control" id="email" name="email">
+                            <label for="email" class="form-label">Email <span class="text-danger">*</span></label>
+                            <input type="email" class="form-control" id="email" name="email" required>
+                            <small class="text-muted">Votre email est obligatoire</small>
                         </div>
                         <div class="col-md-6 mb-3">
-                            <label for="date_naissance" class="form-label">Date de Naissance</label>
-                            <input type="date" class="form-control" id="date_naissance" name="date_naissance">
+                            <label for="date_naissance" class="form-label">Date de Naissance <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="date_naissance" name="date_naissance" required>
+                            <small class="text-muted">Votre date de naissance est obligatoire</small>
                         </div>
                     </div>
 
                     <div class="row">
                         <div class="col-md-6 mb-3">
-                            <label for="lieu_naissance" class="form-label">Lieu de Naissance</label>
-                            <input type="text" class="form-control" id="lieu_naissance" name="lieu_naissance">
+                            <label for="lieu_naissance" class="form-label">Lieu de Naissance <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="lieu_naissance" name="lieu_naissance" required>
+                            <small class="text-muted">Votre lieu de naissance est obligatoire</small>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label for="categorie" class="form-label">Catégorie <span class="text-danger">*</span></label>
